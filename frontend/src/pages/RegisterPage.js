@@ -217,14 +217,10 @@ const RegisterPage = () => {
                       <SelectValue placeholder="Select a tier" />
                     </SelectTrigger>
                     <SelectContent>
-                      {tiers.map((tier) => (
-                        <SelectItem key={tier.value} value={tier.value}>
-                          <div>
-                            <div className="font-medium">{tier.label}</div>
-                            <div className="text-xs text-muted-foreground">{tier.description}</div>
-                          </div>
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="bronze">Bronze - $97/mo (Email alerts, 24hr delayed access)</SelectItem>
+                      <SelectItem value="silver">Silver - $297/mo (Real-time alerts, instant access)</SelectItem>
+                      <SelectItem value="gold">Gold - $597/mo (30-min early access, direct seller contact)</SelectItem>
+                      <SelectItem value="platinum">Platinum - $1,497/mo (Exclusive listings, deal guarantee)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">You can upgrade anytime from settings</p>
