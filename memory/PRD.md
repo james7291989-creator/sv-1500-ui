@@ -186,3 +186,67 @@ Build a comprehensive, legally-compliant real estate wholesaling app for Missour
 ---
 
 *Last Updated: December 2024*
+
+---
+
+## Integration Modules Added (December 2024)
+
+All integration modules are now built and ready to accept API keys:
+
+### `/app/backend/integrations/` Directory
+
+| Module | File | Purpose |
+|--------|------|---------|
+| PropStream | `propstream.py` | Missouri property data search, skip tracing |
+| Twilio | `twilio_outreach.py` | SMS/Voice seller outreach with Missouri-compliant templates |
+| DocuSign | `docusign_contracts.py` | E-signatures with Missouri disclosure templates |
+| Notarize | `notarize_ron.py` | Remote Online Notarization (RON) for deeds |
+
+### API Endpoints for Integrations
+
+```
+GET  /api/integration-status          - Check all integration status
+GET  /api/integrations/propstream/status
+POST /api/integrations/propstream/search
+GET  /api/integrations/twilio/status
+POST /api/integrations/twilio/send-sms
+GET  /api/integrations/docusign/status
+POST /api/integrations/docusign/create-envelope
+GET  /api/integrations/notarize/status
+POST /api/integrations/notarize/create-session
+GET  /api/integrations/all-status
+```
+
+### Environment Variables Required
+
+Add these to `/app/backend/.env` when you obtain the keys:
+
+```env
+# PropStream - Property Data
+PROPSTREAM_API_KEY=your_key_here
+
+# Twilio - SMS/Voice
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_token
+TWILIO_PHONE_NUMBER=+18161234567
+
+# DocuSign - E-Signatures
+DOCUSIGN_INTEGRATION_KEY=your_key
+DOCUSIGN_USER_ID=your_user_id
+DOCUSIGN_ACCOUNT_ID=your_account_id
+
+# Notarize.com - Remote Notarization
+NOTARIZE_API_KEY=your_key
+```
+
+### Missouri-Specific Templates Included
+
+1. **SMS Outreach Sequences** - Day 0, 2, 4 follow-up templates
+2. **Purchase Agreement** - With assignable rights clause
+3. **Assignment Agreement** - With fee disclosure
+4. **Required Disclosures** - Lead paint, seller disclosure, no representation
+5. **RON Workflow** - Missouri-compliant remote notarization
+
+---
+
+*Integration modules ready for production use with API keys*
