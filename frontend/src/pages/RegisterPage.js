@@ -24,13 +24,6 @@ const RegisterPage = () => {
     tier: 'bronze'
   });
 
-  const tiers = [
-    { value: 'bronze', label: 'Bronze - $97/mo', description: 'Email alerts, 24hr delayed access' },
-    { value: 'silver', label: 'Silver - $297/mo', description: 'Real-time alerts, instant access' },
-    { value: 'gold', label: 'Gold - $597/mo', description: '30-min early access, direct seller contact' },
-    { value: 'platinum', label: 'Platinum - $1,497/mo', description: 'Exclusive listings, deal guarantee' }
-  ];
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
