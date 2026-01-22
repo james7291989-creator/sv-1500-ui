@@ -31,11 +31,13 @@ const Properties = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    if (filters.city !== 'all' || filters.minScore > 0 || filters.status) {
-      fetchProperties();
-    } else {
-      fetchProperties();
-    }
+    fetchProperties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchProperties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.city, filters.minScore, filters.status]);
 
   const fetchProperties = async () => {
