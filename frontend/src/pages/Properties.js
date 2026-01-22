@@ -117,7 +117,7 @@ const Properties = () => {
                   <SelectValue placeholder="All Cities" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Cities</SelectItem>
+                  <SelectItem value="all">All Cities</SelectItem>
                   {cities.map(city => (
                     <SelectItem key={city} value={city}>{city}</SelectItem>
                   ))}
@@ -141,14 +141,14 @@ const Properties = () => {
               </Select>
 
               <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters({ ...filters, status: value })}
+                value={filters.status || 'all'}
+                onValueChange={(value) => setFilters({ ...filters, status: value === 'all' ? '' : value })}
               >
                 <SelectTrigger className="w-[180px]" data-testid="status-filter">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="new">New</SelectItem>
                   <SelectItem value="contacted">Contacted</SelectItem>
                   <SelectItem value="under_contract">Under Contract</SelectItem>
