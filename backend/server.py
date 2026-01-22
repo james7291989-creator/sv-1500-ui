@@ -1347,6 +1347,270 @@ app.include_router(outreach_router)
 app.include_router(chat_router)
 app.include_router(closing_router)
 app.include_router(admin_router)
+app.include_router(integrations_router)
+
+# ========================== EXTERNAL INTEGRATIONS ROUTES ==========================
+@integrations_router.get("/propstream/status")
+async def propstream_status(user: Dict = Depends(get_admin_user)):
+    """Check PropStream API configuration status"""
+    try:
+        from integrations.propstream import propstream_client
+        return {
+            "service": "PropStream",
+            "configured": propstream_client.is_configured,
+            "description": "Missouri property data and skip tracing",
+            "cost": "$150-400/month + $500 setup",
+            "how_to_get": "Call (888) 776-9527 → Request API access → Sign data agreement"
+        }
+    except ImportError:
+        return {"service": "PropStream", "configured": False, "error": "Module not loaded"}
+
+@integrations_router.post("/propstream/search")
+async def propstream_search(
+    counties: List[str] = None,
+    min_equity: int = 30,
+    limit: int = 100,
+    user: Dict = Depends(get_admin_user)
+):
+    """Search Missouri distressed properties via PropStream"""
+    try:
+        from integrations.propstream import propstream_client
+        result = await propstream_client.search_distressed_properties(
+            counties=counties,
+            min_equity_percent=min_equity,
+            limit=limit
+        )
+        return result
+    except ImportError:
+        return {"status": "error", "message": "PropStream module not available"}
+
+@integrations_router.get("/twilio/status")
+async def twilio_status(user: Dict = Depends(get_admin_user)):
+    """Check Twilio configuration status"""
+    try:
+        from integrations.twilio_outreach import twilio_client
+        return {
+            "service": "Twilio",
+            "configured": twilio_client.is_configured,
+            "description": "SMS and voice outreach to property owners",
+            "cost": "Pay-as-you-go: $0.0075/SMS, $0.013/min voice",
+            "how_to_get": "twilio.com/try-twilio → Instant trial key → Upgrade for production"
+        }
+    except ImportError:
+        return {"service": "Twilio", "configured": False, "error": "Module not loaded"}
+
+@integrations_router.post("/twilio/send-sms")
+async def send_twilio_sms(
+    property_id: str,
+    day: int = 0,
+    user: Dict = Depends(get_admin_user)
+):
+    """Send SMS to property owner"""
+    try:
+        from integrations.twilio_outreach import twilio_client, OutreachDay
+        
+        prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        
+        if not prop.get("owner_phone"):
+            raise HTTPException(status_code=400, detail="Owner phone not available")
+        
+        owner_name = prop.get("owner_name", "Property Owner")
+        owner_first_name = owner_name.split()[0] if owner_name else "there"
+        
+        property_data = {
+            "owner_first_name": owner_first_name,
+            "property_address": prop.get("address"),
+            "city": prop.get("city"),
+            "county": prop.get("county")
+        }
+        
+        outreach_day = OutreachDay(day) if day in [0, 2, 4] else OutreachDay.DAY_0
+        result = await twilio_client.send_sms(prop["owner_phone"], property_data, outreach_day)
+        return result
+        
+    except ImportError:
+        return {"status": "error", "message": "Twilio module not available"}
+
+@integrations_router.get("/docusign/status")
+async def docusign_status(user: Dict = Depends(get_admin_user)):
+    """Check DocuSign configuration status"""
+    try:
+        from integrations.docusign_contracts import docusign_client
+        return {
+            "service": "DocuSign",
+            "configured": docusign_client.is_configured,
+            "description": "E-signatures for purchase and assignment contracts",
+            "cost": "$25-50/month",
+            "how_to_get": "developers.docusign.com → Create dev account → Apply for production"
+        }
+    except ImportError:
+        return {"service": "DocuSign", "configured": False, "error": "Module not loaded"}
+
+@integrations_router.post("/docusign/create-envelope")
+async def create_docusign_envelope(
+    contract_id: str,
+    user: Dict = Depends(get_admin_user)
+):
+    """Create DocuSign envelope for contract signing"""
+    try:
+        from integrations.docusign_contracts import docusign_client
+        
+        contract = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+        if not contract:
+            raise HTTPException(status_code=404, detail="Contract not found")
+        
+        prop = await db.properties.find_one({"id": contract["property_id"]}, {"_id": 0})
+        
+        signers = []
+        if contract.get("seller_email"):
+            signers.append({
+                "email": contract["seller_email"],
+                "name": contract.get("seller_name", "Seller"),
+                "role": "seller"
+            })
+        if contract.get("buyer_id"):
+            buyer = await db.users.find_one({"id": contract["buyer_id"]}, {"_id": 0, "password_hash": 0})
+            if buyer:
+                signers.append({
+                    "email": buyer["email"],
+                    "name": f"{buyer['first_name']} {buyer['last_name']}",
+                    "role": "buyer"
+                })
+        
+        result = await docusign_client.create_envelope(
+            template_type=contract.get("contract_type", "purchase_agreement"),
+            contract_data={
+                "property_address": prop.get("address") if prop else "N/A",
+                "purchase_price": contract.get("purchase_price"),
+                "earnest_money": contract.get("earnest_money_deposit"),
+                "closing_days": contract.get("closing_days")
+            },
+            signers=signers,
+            property_year_built=prop.get("year_built") if prop else None
+        )
+        return result
+        
+    except ImportError:
+        return {"status": "error", "message": "DocuSign module not available"}
+
+@integrations_router.get("/notarize/status")
+async def notarize_status(user: Dict = Depends(get_admin_user)):
+    """Check Notarize.com configuration status"""
+    try:
+        from integrations.notarize_ron import notarize_client, MISSOURI_RON_REQUIREMENTS
+        return {
+            "service": "Notarize.com",
+            "configured": notarize_client.is_configured,
+            "description": "Remote Online Notarization for Missouri deeds",
+            "cost": "$25 per notarization",
+            "how_to_get": "notarize.com/business → Schedule sales call → API agreement",
+            "missouri_ron": MISSOURI_RON_REQUIREMENTS
+        }
+    except ImportError:
+        return {"service": "Notarize", "configured": False, "error": "Module not loaded"}
+
+@integrations_router.post("/notarize/create-session")
+async def create_notarize_session(
+    closing_id: str,
+    document_type: str = "warranty_deed",
+    user: Dict = Depends(get_admin_user)
+):
+    """Create remote notarization session"""
+    try:
+        from integrations.notarize_ron import notarize_client
+        
+        closing = await db.closing_transactions.find_one({"id": closing_id}, {"_id": 0})
+        if not closing:
+            raise HTTPException(status_code=404, detail="Closing not found")
+        
+        contract = await db.contracts.find_one({"id": closing["contract_id"]}, {"_id": 0})
+        prop = await db.properties.find_one({"id": closing["property_id"]}, {"_id": 0})
+        
+        result = await notarize_client.create_notarization_session(
+            document_type=document_type,
+            signer_info={
+                "name": contract.get("seller_name") if contract else "Seller",
+                "email": contract.get("seller_email") if contract else "",
+                "phone": prop.get("owner_phone") if prop else ""
+            },
+            document_url="",  # Would be actual signed document URL
+            property_address=prop.get("address") if prop else "N/A"
+        )
+        return result
+        
+    except ImportError:
+        return {"status": "error", "message": "Notarize module not available"}
+
+@integrations_router.get("/all-status")
+async def all_integrations_status(user: Dict = Depends(get_admin_user)):
+    """Get status of all external integrations"""
+    statuses = []
+    
+    # PropStream
+    try:
+        from integrations.propstream import propstream_client
+        statuses.append({
+            "service": "PropStream",
+            "configured": propstream_client.is_configured,
+            "purpose": "Property data & skip tracing",
+            "priority": "HIGH - Required for real property data"
+        })
+    except:
+        statuses.append({"service": "PropStream", "configured": False, "error": "Module error"})
+    
+    # Twilio
+    try:
+        from integrations.twilio_outreach import twilio_client
+        statuses.append({
+            "service": "Twilio",
+            "configured": twilio_client.is_configured,
+            "purpose": "SMS/Voice seller outreach",
+            "priority": "HIGH - Required for automated outreach"
+        })
+    except:
+        statuses.append({"service": "Twilio", "configured": False, "error": "Module error"})
+    
+    # DocuSign
+    try:
+        from integrations.docusign_contracts import docusign_client
+        statuses.append({
+            "service": "DocuSign",
+            "configured": docusign_client.is_configured,
+            "purpose": "E-signatures on contracts",
+            "priority": "HIGH - Required for contract execution"
+        })
+    except:
+        statuses.append({"service": "DocuSign", "configured": False, "error": "Module error"})
+    
+    # Notarize
+    try:
+        from integrations.notarize_ron import notarize_client
+        statuses.append({
+            "service": "Notarize.com",
+            "configured": notarize_client.is_configured,
+            "purpose": "Remote online notarization",
+            "priority": "MEDIUM - Required for deed notarization"
+        })
+    except:
+        statuses.append({"service": "Notarize", "configured": False, "error": "Module error"})
+    
+    # Built-in integrations
+    statuses.append({
+        "service": "Stripe",
+        "configured": bool(STRIPE_API_KEY),
+        "purpose": "Subscriptions & EMD payments",
+        "priority": "ACTIVE"
+    })
+    statuses.append({
+        "service": "OpenAI GPT-5.2",
+        "configured": bool(os.environ.get('EMERGENT_LLM_KEY')),
+        "purpose": "AI property analysis & chatbot",
+        "priority": "ACTIVE"
+    })
+    
+    return {"integrations": statuses}
 
 app.add_middleware(
     CORSMiddleware,
