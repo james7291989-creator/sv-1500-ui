@@ -31,14 +31,18 @@ const Properties = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    fetchProperties();
+    if (filters.city !== 'all' || filters.minScore > 0 || filters.status) {
+      fetchProperties();
+    } else {
+      fetchProperties();
+    }
   }, [filters.city, filters.minScore, filters.status]);
 
   const fetchProperties = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (filters.city) params.append('city', filters.city);
+      if (filters.city && filters.city !== 'all') params.append('city', filters.city);
       if (filters.minScore) params.append('min_score', filters.minScore);
       if (filters.status) params.append('status', filters.status);
       
