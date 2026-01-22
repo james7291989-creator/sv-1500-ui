@@ -45,6 +45,7 @@ outreach_router = APIRouter(prefix="/api/outreach", tags=["Outreach"])
 chat_router = APIRouter(prefix="/api/chat", tags=["AI Chat"])
 closing_router = APIRouter(prefix="/api/closing", tags=["Closing"])
 admin_router = APIRouter(prefix="/api/admin", tags=["Admin"])
+integrations_router = APIRouter(prefix="/api/integrations", tags=["External Integrations"])
 
 security = HTTPBearer()
 
