@@ -583,3 +583,4 @@ body {
     @apply border-border;
   }
 }
+`n/* Rodney & Sons Sovereign Style: Kill the Watermark */`n[class*="watermark"], [id*="watermark"], div[style*="fixed"][style*="bottom: 0"][style*="right: 0"], a[href*="emergent"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }

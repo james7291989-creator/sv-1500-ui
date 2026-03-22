@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
@@ -117,7 +117,7 @@ const RegisterPage = () => {
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                       className="pl-10 pr-10"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -280,7 +280,7 @@ const RegisterPage = () => {
           
           <div className="space-y-4 text-left max-w-sm">
             {[
-              'Distressed property database with DistressScore™',
+              'Distressed property database with Rodney Scoreâ„¢',
               'AI-powered property analysis and valuation',
               'Automated seller outreach campaigns',
               'Digital contracts with e-signatures',
@@ -302,3 +302,4 @@ const RegisterPage = () => {
 };
 
 export default RegisterPage;
+

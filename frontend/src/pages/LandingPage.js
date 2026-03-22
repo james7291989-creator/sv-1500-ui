@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { 
@@ -20,7 +20,7 @@ const LandingPage = () => {
     {
       icon: Building2,
       title: "Distressed Property Database",
-      description: "Access thousands of off-market properties with DistressScore™ ratings. Tax delinquent, vacant, probate, and foreclosure leads."
+      description: "Access thousands of off-market properties with Rodney Scoreâ„¢ ratings. Tax delinquent, vacant, probate, and foreclosure leads."
     },
     {
       icon: Zap,
@@ -200,7 +200,7 @@ const LandingPage = () => {
               Everything You Need to <span className="gradient-text">Close Deals</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From finding distressed properties to collecting your assignment fee — all automated.
+              From finding distressed properties to collecting your assignment fee â€” all automated.
             </p>
           </div>
 
@@ -229,7 +229,7 @@ const LandingPage = () => {
               Choose Your <span className="gradient-text-blue">Investment Level</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From casual investor to full-time wholesaler — we have the right tier for your goals.
+              From casual investor to full-time wholesaler â€” we have the right tier for your goals.
             </p>
           </div>
 
@@ -313,7 +313,7 @@ const LandingPage = () => {
               <span className="font-bold">MO Deal Wholesaler</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 MO Deal Wholesaler. Missouri Real Estate Investment Platform.
+              Â© 2024 MO Deal Wholesaler. Missouri Real Estate Investment Platform.
             </p>
           </div>
           <div className="mt-6 pt-6 border-t border-border">
@@ -329,3 +329,4 @@ const LandingPage = () => {
 };
 
 export default LandingPage;
+
