@@ -1,162 +1,165 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Building2, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { toast } from 'sonner';
+import { useNavigate, Link } from 'react-router-dom';
+import { Building2, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
+    setError('');
 
     try {
-      await login(formData.email, formData.password);
-      toast.success('Welcome back!');
+      // 1. Securely fetch the API URL from Vite Environment Variables
+      // Fallback to the live URL to guarantee it never hits localhost in production
+      const baseUrl = import.meta.env.VITE_API_URL || 'https://rodney-vault-api.onrender.com';
+      
+      // 2. Execute POST request matching FastAPI's exact JSON schema
+      const response = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        }),
+      });
+
+      const data = await response.json();
+
+      // 3. Handle Backend Rejections (Invalid Credentials)
+      if (!response.ok) {
+        throw new Error(data.detail || 'Invalid email or password.');
+      }
+
+      // 4. Session Storage & Security
+      // Store the JWT token securely for future API calls
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // 5. Route to Protected Dashboard
       navigate('/dashboard');
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Invalid credentials');
+
+    } catch (err) {
+      console.error("Login Error:", err);
+      setError(err.message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left side - Form */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-bold text-xl">MO Deal Wholesaler</span>
-          </Link>
-
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-            <p className="text-muted-foreground">Sign in to access your investment dashboard</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="investor@example.com"
-                  className="pl-10"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  data-testid="login-email-input"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  className="pl-10 pr-10"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                  data-testid="login-password-input"
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <Button 
-              type="submit" 
-              className="w-full btn-primary"
-              disabled={loading}
-              data-testid="login-submit-btn"
-            >
-              {loading ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Signing in...</span>
-                </div>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </>
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <p className="text-muted-foreground">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary hover:underline font-medium">
-                Create Account
-              </Link>
-            </p>
+    <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="flex justify-center">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center glow-primary">
+            <Building2 className="w-8 h-8 text-white" />
           </div>
         </div>
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
+          Sign in to your account
+        </h2>
+        <p className="mt-2 text-center text-sm text-muted-foreground">
+          Or{' '}
+          <Link to="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
+            start your 14-day free trial
+          </Link>
+        </p>
       </div>
 
-      {/* Right side - Image/Info */}
-      <div className="hidden lg:flex flex-1 bg-card relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20" />
-        <div className="absolute inset-0 noise-overlay" />
-        
-        <div className="relative flex flex-col items-center justify-center p-12 text-center">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-8 animate-float">
-            <Building2 className="w-12 h-12 text-white" />
-          </div>
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-card py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-border">
           
-          <h2 className="text-3xl font-bold mb-4">
-            Missouri's Premier<br />
-            <span className="gradient-text">Wholesale Platform</span>
-          </h2>
-          
-          <p className="text-muted-foreground max-w-md mb-8">
-            Access off-market distressed properties, AI-powered analysis, and automated deal closing. Your investment pipeline starts here.
-          </p>
-          
-          <div className="grid grid-cols-2 gap-6">
-            <div className="p-4 rounded-xl bg-background/50 backdrop-blur">
-              <div className="text-2xl font-bold gradient-text">500+</div>
-              <div className="text-sm text-muted-foreground">Active Properties</div>
+          {/* Error State UI */}
+          {error && (
+            <div className="mb-4 bg-red-500/10 border border-red-500/50 p-4 rounded-md flex items-center gap-3 text-red-500">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm font-medium">{error}</p>
             </div>
-            <div className="p-4 rounded-xl bg-background/50 backdrop-blur">
-              <div className="text-2xl font-bold gradient-text-blue">$12K</div>
-              <div className="text-sm text-muted-foreground">Avg. Assignment Fee</div>
+          )}
+
+          <form className="space-y-6" onSubmit={handleLogin}>
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-foreground">
+                Email address
+              </label>
+              <div className="mt-1">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="appearance-none block w-full px-3 py-2 border border-border rounded-md shadow-sm placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-background text-foreground"
+                  placeholder="admin@rodneyvault.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                Password
+              </label>
+              <div className="mt-1">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="appearance-none block w-full px-3 py-2 border border-border rounded-md shadow-sm placeholder-muted-foreground focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-background text-foreground"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Authenticating...
+                  </>
+                ) : (
+                  <>
+                    Sign in
+                    <ArrowRight className="w-4 h-4 ml-2 mt-0.5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+          
+          {/* OAuth Placeholders - Ready for Step 4 Implementation */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-card text-muted-foreground">Master Access Only</span>
+              </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
