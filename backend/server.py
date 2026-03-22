@@ -998,7 +998,7 @@ async def send_chat_message(chat_req: ChatRequest, user: Dict = Depends(get_curr
             
             "property_analysis": """You are an expert real estate investment analyst specializing in Missouri wholesale deals.
             Analyze properties for: ARV, repair costs, comparable sales, risk factors, and recommended offer prices.
-            Use the 70% rule: MAO = ARV × 0.70 - Repairs - Wholesale Fee
+            Use the 70% rule: MAO = ARV * 0.70 - Repairs - Wholesale Fee
             Be specific with numbers and provide actionable insights.""",
             
             "offer_generation": """You are a deal structuring expert for MO Deal Wholesaler.
@@ -1360,7 +1360,7 @@ async def propstream_status(user: Dict = Depends(get_admin_user)):
             "configured": propstream_client.is_configured,
             "description": "Missouri property data and skip tracing",
             "cost": "$150-400/month + $500 setup",
-            "how_to_get": "Call (888) 776-9527 → Request API access → Sign data agreement"
+            "how_to_get": "Call (888) 776-9527 -> Request API access -> Sign data agreement"
         }
     except ImportError:
         return {"service": "PropStream", "configured": False, "error": "Module not loaded"}
@@ -1394,7 +1394,7 @@ async def twilio_status(user: Dict = Depends(get_admin_user)):
             "configured": twilio_client.is_configured,
             "description": "SMS and voice outreach to property owners",
             "cost": "Pay-as-you-go: $0.0075/SMS, $0.013/min voice",
-            "how_to_get": "twilio.com/try-twilio → Instant trial key → Upgrade for production"
+            "how_to_get": "twilio.com/try-twilio -> Instant trial key -> Upgrade for production"
         }
     except ImportError:
         return {"service": "Twilio", "configured": False, "error": "Module not loaded"}
@@ -1443,7 +1443,7 @@ async def docusign_status(user: Dict = Depends(get_admin_user)):
             "configured": docusign_client.is_configured,
             "description": "E-signatures for purchase and assignment contracts",
             "cost": "$25-50/month",
-            "how_to_get": "developers.docusign.com → Create dev account → Apply for production"
+            "how_to_get": "developers.docusign.com -> Create dev account -> Apply for production"
         }
     except ImportError:
         return {"service": "DocuSign", "configured": False, "error": "Module not loaded"}
@@ -1505,7 +1505,7 @@ async def notarize_status(user: Dict = Depends(get_admin_user)):
             "configured": notarize_client.is_configured,
             "description": "Remote Online Notarization for Missouri deeds",
             "cost": "$25 per notarization",
-            "how_to_get": "notarize.com/business → Schedule sales call → API agreement",
+            "how_to_get": "notarize.com/business -> Schedule sales call -> API agreement",
             "missouri_ron": MISSOURI_RON_REQUIREMENTS
         }
     except ImportError:
@@ -1612,10 +1612,15 @@ async def all_integrations_status(user: Dict = Depends(get_admin_user)):
     
     return {"integrations": statuses}
 
+# Updated CORS configuration for Production
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://rodneyandsonsenterprise-9kq2hc5l1-james-arms-projects.vercel.app",
+        "https://n-smoky-sigma.vercel.app"
+    ],
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
