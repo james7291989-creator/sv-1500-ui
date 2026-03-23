@@ -15,6 +15,10 @@ import bcrypt
 from enum import Enum
 import json
 
+# --- NEW GOOGLE AUTH IMPORTS ---
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -27,6 +31,9 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', 'mo-deal-wholesaler-secret-key-2024')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+
+# --- GOOGLE CLIENT ID ---
+GOOGLE_CLIENT_ID = "783162825648-1nllnud8mm7ibuflli1ttrhpd58oo7c8.apps.googleusercontent.com"
 
 # Stripe Configuration
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', 'sk_test_emergent')
@@ -100,6 +107,10 @@ class UserCreate(UserBase):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+# NEW: Google Token Model
+class GoogleTokenAuth(BaseModel):
+    token: str
 
 class User(UserBase):
     model_config = ConfigDict(extra="ignore")
@@ -352,6 +363,55 @@ def calculate_fees(contracted_price: float, investor_price: float, expedited: bo
     }
 
 # ========================== AUTH ROUTES ==========================
+
+# ---> NEW GOOGLE AUTH ROUTE <---
+@auth_router.post("/google")
+async def google_auth(request: GoogleTokenAuth):
+    """Verifies Google JWT and logs user in (or creates new account)"""
+    try:
+        # 1. Verify token with Google's servers
+        idinfo = id_token.verify_oauth2_token(
+            request.token, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+        
+        email = idinfo.get('email')
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+
+        if not email:
+            raise HTTPException(status_code=400, detail="Email not provided by Google")
+
+        # 2. Check if user exists in Database
+        user = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if not user:
+            # 3. AUTO-REGISTER NEW USER
+            new_user = User(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                tier=InvestorTier.BRONZE
+            )
+            
+            user_dict = new_user.model_dump()
+            # Generate a random dummy password since they use Google
+            user_dict["password_hash"] = hash_password(str(uuid.uuid4())) 
+            user_dict["created_at"] = user_dict["created_at"].isoformat()
+            user_dict["updated_at"] = user_dict["updated_at"].isoformat()
+            
+            await db.users.insert_one(user_dict)
+            user = user_dict
+            
+        # 4. Generate our App JWT Token for the Dashboard
+        token = create_token(user["id"], user["email"], user.get("is_admin", False))
+        user.pop("password_hash", None)
+        
+        return {"token": token, "user": user}
+
+    except ValueError as e:
+        logger.error(f"Google Auth Error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
 @auth_router.post("/register")
 async def register(user_data: UserCreate):
     existing = await db.users.find_one({"email": user_data.email})
