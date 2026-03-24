@@ -20,7 +20,7 @@ const LandingPage = () => {
     {
       icon: Building2,
       title: "Distressed Property Database",
-      description: "Access thousands of off-market properties with Rodney Scoreâ„¢ ratings. Tax delinquent, vacant, probate, and foreclosure leads."
+      description: "Access thousands of off-market properties with Rodney Score™ ratings. Tax delinquent, vacant, probate, and foreclosure leads."
     },
     {
       icon: Zap,
@@ -54,6 +54,7 @@ const LandingPage = () => {
       name: "Bronze",
       price: 97,
       color: "from-amber-700 to-amber-900",
+      stripeLink: "https://buy.stripe.com/dRm8wOa3m7g8gXl9an2Ji03", 
       features: [
         "Email alerts on new deals",
         "24-hour delayed access",
@@ -66,6 +67,7 @@ const LandingPage = () => {
       price: 297,
       color: "from-gray-400 to-gray-600",
       popular: false,
+      stripeLink: "https://buy.stripe.com/aFa3cu5N62ZS0YndqD2Ji04", 
       features: [
         "Real-time deal alerts",
         "Instant property access",
@@ -79,6 +81,7 @@ const LandingPage = () => {
       price: 597,
       color: "from-yellow-500 to-amber-600",
       popular: true,
+      stripeLink: "https://buy.stripe.com/8x214ma3mbwofTh5Yb2Ji02", 
       features: [
         "30-minute early access",
         "Direct seller contact",
@@ -91,6 +94,7 @@ const LandingPage = () => {
       name: "Platinum",
       price: 1497,
       color: "from-gray-200 to-gray-400",
+      stripeLink: "https://buy.stripe.com/6oUaEW6Ra8kc7mL72f2Ji00", 
       features: [
         "Exclusive pocket listings",
         "Negotiated bulk pricing",
@@ -118,7 +122,7 @@ const LandingPage = () => {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center glow-primary">
                 <Building2 className="w-6 h-6 text-white" />
               </div>
-              <span className="font-bold text-xl">MO Deal Wholesaler</span>
+              <span className="font-bold text-xl">Rodney & Sons</span>
             </div>
             <div className="flex items-center space-x-4">
               <Link to="/login">
@@ -126,7 +130,7 @@ const LandingPage = () => {
                   Sign In
                 </Button>
               </Link>
-              <Link to="/register">
+              <Link to="/login">
                 <Button className="btn-primary">
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-2" />
@@ -164,7 +168,7 @@ const LandingPage = () => {
             <Button 
               size="lg" 
               className="btn-primary text-lg px-8 py-6"
-              onClick={() => navigate('/register')}
+              onClick={() => navigate('/login')}
               data-testid="hero-get-started-btn"
             >
               Start Investing Today
@@ -200,7 +204,7 @@ const LandingPage = () => {
               Everything You Need to <span className="gradient-text">Close Deals</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From finding distressed properties to collecting your assignment fee â€” all automated.
+              From finding distressed properties to collecting your assignment fee — all automated.
             </p>
           </div>
 
@@ -229,7 +233,7 @@ const LandingPage = () => {
               Choose Your <span className="gradient-text-blue">Investment Level</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From casual investor to full-time wholesaler â€” we have the right tier for your goals.
+              From casual investor to full-time wholesaler — we have the right tier for your goals.
             </p>
           </div>
 
@@ -266,7 +270,7 @@ const LandingPage = () => {
                 <Button 
                   className={`w-full ${tier.popular ? 'btn-primary' : ''}`}
                   variant={tier.popular ? 'default' : 'outline'}
-                  onClick={() => navigate('/register')}
+                  onClick={() => window.location.href = tier.stripeLink}
                   data-testid={`pricing-${tier.name.toLowerCase()}-btn`}
                 >
                   Get Started
@@ -288,12 +292,12 @@ const LandingPage = () => {
             Ready to Start <span className="gradient-text">Closing Deals</span>?
           </h2>
           <p className="text-lg text-muted-foreground mb-10">
-            Join hundreds of Missouri investors already using MO Deal Wholesaler to find off-market properties and collect assignment fees.
+            Join hundreds of Missouri investors already using Rodney & Sons to find off-market properties and collect assignment fees.
           </p>
           <Button 
             size="lg" 
             className="btn-primary text-lg px-10 py-6"
-            onClick={() => navigate('/register')}
+            onClick={() => navigate('/login')}
             data-testid="cta-get-started-btn"
           >
             Create Free Account
@@ -310,15 +314,15 @@ const LandingPage = () => {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold">MO Deal Wholesaler</span>
+              <span className="font-bold">Rodney & Sons</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Â© 2024 MO Deal Wholesaler. Missouri Real Estate Investment Platform.
+              © 2026 Rodney & Sons Enterprise. Missouri Real Estate Investment Platform.
             </p>
           </div>
           <div className="mt-6 pt-6 border-t border-border">
             <p className="text-xs text-muted-foreground text-center">
-              MO Deal Wholesaler operates as a principal in real estate transactions, not as a broker or agent. 
+              Rodney & Sons operates as a principal in real estate transactions, not as a broker or agent. 
               We buy equitable interest in properties via assignable purchase contracts. Not licensed real estate advice.
             </p>
           </div>
@@ -329,4 +333,3 @@ const LandingPage = () => {
 };
 
 export default LandingPage;
-
