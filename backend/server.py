@@ -14,6 +14,8 @@ import jwt
 import bcrypt
 from enum import Enum
 import json
+import stripe
+import google.generativeai as genai
 
 # --- NEW GOOGLE AUTH IMPORTS ---
 from google.oauth2 import id_token
@@ -46,8 +48,15 @@ JWT_EXPIRATION_HOURS = 24
 # --- GOOGLE CLIENT ID ---
 GOOGLE_CLIENT_ID = "783162825648-1nllnud8mm7ibuflli1ttrhpd58oo7c8.apps.googleusercontent.com"
 
-# Stripe Configuration
-STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', 'sk_test_emergent')
+# --- STRIPE & GEMINI CONFIGURATION ---
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_emergent')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+PLATFORM_DOMAIN = "https://n-smoky-sigma.vercel.app"
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    ai_model = genai.GenerativeModel('gemini-2.5-flash')
 
 # Create the main app
 app = FastAPI(title="Rodney & Sons OS API", version="1.0.0")
@@ -515,65 +524,6 @@ async def delete_property(property_id: str, user: Dict = Depends(get_admin_user)
         raise HTTPException(status_code=404, detail="Property not found")
     return {"message": "Property deleted"}
 
-@properties_router.post("/{property_id}/analyze")
-async def analyze_property(property_id: str, user: Dict = Depends(get_current_user)):
-    prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        api_key = os.environ.get('EMERGENT_LLM_KEY')
-        if not api_key:
-            raise HTTPException(status_code=500, detail="AI service not configured")
-        
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"property-analysis-{property_id}",
-            system_message="""You are an expert real estate wholesaling analyst in Missouri. 
-            Analyze distressed properties and provide detailed investment analysis including:
-            - ARV estimation rationale
-            - Repair cost breakdown
-            - Comparable sales analysis
-            - Risk factors
-            - Recommended offer price (70% rule)
-            - Exit strategy recommendations (flip, BRRRR, wholesale)
-            Be specific with numbers and actionable insights."""
-        ).with_model("openai", "gpt-5.2")
-        
-        analysis_prompt = f"""Analyze this Missouri distressed property:
-        
-Address: {prop.get('address')}, {prop.get('city')}, {prop.get('state')} {prop.get('zip_code')}
-County: {prop.get('county')}
-Property Type: {prop.get('property_type')}
-Beds/Baths: {prop.get('bedrooms')}/{prop.get('bathrooms')}
-Sqft: {prop.get('sqft')}
-Year Built: {prop.get('year_built')}
-Lot Size: {prop.get('lot_size')} acres
-
-Distress Indicators:
-- Tax Delinquency: {prop.get('tax_delinquency_years')} years (${prop.get('tax_delinquency_amount')})
-- Assessed Value: ${prop.get('assessed_value')}
-- DistressScore: {prop.get('distress_score')}/100
-
-Notes: {prop.get('notes', 'None')}
-
-Provide a comprehensive investment analysis with specific recommendations."""
-        
-        response = await chat.send_message(UserMessage(text=analysis_prompt))
-        
-        return {
-            "property_id": property_id,
-            "analysis": response,
-            "generated_at": datetime.now(timezone.utc).isoformat()
-        }
-    except ImportError:
-        raise HTTPException(status_code=500, detail="AI integration not available")
-    except Exception as e:
-        logger.error(f"AI analysis error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-
 # ========================== CONTRACT ROUTES ==========================
 @contracts_router.post("")
 async def create_contract(contract_data: ContractCreate, user: Dict = Depends(get_current_user)):
@@ -623,26 +573,12 @@ async def get_contract(contract_id: str, user: Dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Contract not found")
     return contract
 
-@contracts_router.put("/{contract_id}/status")
-async def update_contract_status(contract_id: str, status: str, user: Dict = Depends(get_admin_user)):
-    valid_statuses = [s.value for s in ContractStatus]
-    if status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
-    
-    await db.contracts.update_one(
-        {"id": contract_id},
-        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    return {"message": "Contract status updated"}
-
 @contracts_router.post("/{contract_id}/send-for-signature")
 async def send_for_signature(contract_id: str, user: Dict = Depends(get_admin_user)):
-    """Send contract for e-signature via DocuSign (requires API key)"""
     contract = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     
-    # FIX: Point directly to CLIENT_ID from your .env
     docusign_key = os.environ.get('CLIENT_ID')
     
     if not docusign_key:
@@ -712,78 +648,71 @@ async def lock_deal(property_id: str, user: Dict = Depends(get_current_user)):
     
     investor_price = prop.get("investor_price", 0)
     fees = calculate_fees(prop.get("contracted_price", 0), investor_price)
-    required_emd = max(fees["assignment_fee"] * 0.5, 2500)
     
     return {
         "property_id": property_id,
         "investor_price": investor_price,
-        "required_emd": required_emd,
+        "required_emd": 5000, # Hardcoded $5k Reservation Fee
         "assignment_fee": fees["assignment_fee"],
         "coordination_fee": fees["coordination_fee"],
         "total_fees": fees["total_fees"],
-        "next_step": "Submit EMD payment to lock this deal"
+        "next_step": "Submit $5,000 reservation fee to lock this deal"
     }
 
 @investors_router.get("/subscription-tiers")
 async def get_subscription_tiers():
     return {"tiers": SUBSCRIPTION_TIERS}
 
-# ========================== PAYMENT ROUTES ==========================
+# ========================== NATIVE STRIPE PAYMENTS ($5k EMD PIPELINE) ==========================
 @payments_router.post("/create-checkout")
 async def create_checkout_session(
-    request: Request,
     payment_type: str,  
     tier: Optional[str] = None,
     property_id: Optional[str] = None,
     user: Dict = Depends(get_current_user)
 ):
     try:
-        from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
-        
-        host_url = str(request.base_url).rstrip('/')
-        webhook_url = f"{host_url}/api/webhook/stripe"
-        
-        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-        
         if payment_type == "subscription":
             if not tier or tier not in SUBSCRIPTION_TIERS:
                 raise HTTPException(status_code=400, detail="Invalid subscription tier")
-            amount = SUBSCRIPTION_TIERS[tier]["price"]
+            amount = int(SUBSCRIPTION_TIERS[tier]["price"] * 100)
+            product_name = f"Rodney & Sons - {tier.title()} Tier"
             metadata = {"type": "subscription", "tier": tier, "user_id": user["id"]}
+            
         elif payment_type == "emd":
             if not property_id:
-                raise HTTPException(status_code=400, detail="Property ID required for EMD")
-            prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
-            if not prop:
-                raise HTTPException(status_code=404, detail="Property not found")
+                raise HTTPException(status_code=400, detail="Property ID required")
             
-            investor_price = prop.get("investor_price", 0)
-            fees = calculate_fees(prop.get("contracted_price", 0), investor_price)
-            amount = max(fees["assignment_fee"] * 0.5, 2500)
-            metadata = {"type": "emd", "property_id": property_id, "user_id": user["id"]}
+            # The 5K Tollbooth
+            amount = 500000  # Exactly $5,000.00 Reservation Fee
+            product_name = f"Assignment Reservation Fee - Property ID: {property_id}"
+            metadata = {"type": "emd", "property_id": property_id, "user_id": user["id"], "buyer_email": user["email"]}
         else:
             raise HTTPException(status_code=400, detail="Invalid payment type")
         
-        origin = request.headers.get("origin", host_url)
-        success_url = f"{origin}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = f"{origin}/payment-cancelled"
-        
-        checkout_request = CheckoutSessionRequest(
-            amount=float(amount),
-            currency="usd",
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata=metadata
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            customer_email=user["email"],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {'name': product_name},
+                    'unit_amount': amount,
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            metadata=metadata,
+            success_url=f'{PLATFORM_DOMAIN}/payment-success?session_id={{CHECKOUT_SESSION_ID}}',
+            cancel_url=f'{PLATFORM_DOMAIN}/payment-cancelled',
         )
-        
-        session = await stripe_checkout.create_checkout_session(checkout_request)
         
         transaction = PaymentTransaction(
             user_id=user["id"],
             email=user["email"],
             transaction_type=payment_type,
-            amount=float(amount),
-            session_id=session.session_id,
+            amount=amount / 100,
+            session_id=session.id,
             payment_status="pending",
             metadata=metadata
         )
@@ -793,143 +722,81 @@ async def create_checkout_session(
         tx_dict["updated_at"] = tx_dict["updated_at"].isoformat()
         await db.payment_transactions.insert_one(tx_dict)
         
-        return {"checkout_url": session.url, "session_id": session.session_id}
+        return {"checkout_url": session.url, "session_id": session.id}
         
-    except ImportError:
-        raise HTTPException(status_code=500, detail="Payment integration not available")
     except Exception as e:
         logger.error(f"Payment error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@payments_router.get("/status/{session_id}")
-async def get_payment_status(session_id: str, user: Dict = Depends(get_current_user)):
-    try:
-        from emergentintegrations.payments.stripe.checkout import StripeCheckout
-        
-        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
-        status = await stripe_checkout.get_checkout_status(session_id)
-        
-        transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-        if transaction and transaction.get("payment_status") != "paid":
-            new_status = status.payment_status
-            update_data = {
-                "payment_status": new_status,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-            
-            await db.payment_transactions.update_one(
-                {"session_id": session_id},
-                {"$set": update_data}
-            )
-            
-            if new_status == "paid":
-                metadata = transaction.get("metadata", {})
-                
-                if metadata.get("type") == "subscription":
-                    tier = metadata.get("tier")
-                    await db.users.update_one(
-                        {"id": transaction["user_id"]},
-                        {"$set": {
-                            "tier": tier,
-                            "subscription_status": "active",
-                            "updated_at": datetime.now(timezone.utc).isoformat()
-                        }}
-                    )
-                elif metadata.get("type") == "emd":
-                    property_id = metadata.get("property_id")
-                    await db.properties.update_one(
-                        {"id": property_id},
-                        {"$set": {
-                            "acquired_by_investor_id": transaction["user_id"],
-                            "status": PropertyStatus.ASSIGNED.value,
-                            "updated_at": datetime.now(timezone.utc).isoformat()
-                        }}
-                    )
-        
-        return {
-            "session_id": session_id,
-            "status": status.status,
-            "payment_status": status.payment_status,
-            "amount": status.amount_total / 100,  
-            "currency": status.currency
-        }
-        
-    except Exception as e:
-        logger.error(f"Payment status error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@payments_router.get("/history")
-async def get_payment_history(user: Dict = Depends(get_current_user)):
-    transactions = await db.payment_transactions.find(
-        {"user_id": user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
-    
-    return {"transactions": transactions}
-
-# ========================== WEBHOOK ROUTE ==========================
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("Stripe-Signature")
+    
     try:
-        from emergentintegrations.payments.stripe.checkout import StripeCheckout
-        
-        body = await request.body()
-        signature = request.headers.get("Stripe-Signature")
-        
-        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
-        webhook_response = await stripe_checkout.handle_webhook(body, signature)
-        
-        if webhook_response.payment_status == "paid":
-            session_id = webhook_response.session_id
-            transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-            
-            if transaction and transaction.get("payment_status") != "paid":
-                await db.payment_transactions.update_one(
-                    {"session_id": session_id},
-                    {"$set": {"payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
-                )
-        
-        return {"status": "ok"}
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
-        logger.error(f"Webhook error: {str(e)}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        session_id = session.get('id')
+        metadata = session.get('metadata', {})
+        
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        if metadata.get("type") == "emd":
+            property_id = metadata.get("property_id")
+            buyer_email = metadata.get("buyer_email")
+            
+            # Lock the property
+            await db.properties.update_one(
+                {"id": property_id},
+                {"$set": {
+                    "acquired_by_investor_id": metadata.get("user_id"),
+                    "status": PropertyStatus.ASSIGNED.value,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            print(f"💰 $5k CAPTURED FOR {property_id}. TRIGGERING DOCUSIGN TO {buyer_email}...")
+            
+    return {"status": "success"}
+
+# ========================== GEMINI AI CHAT ROUTE ==========================
+@chat_router.post("")
+async def chat_endpoint(request: ChatRequest, user: Dict = Depends(get_current_user)):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini AI is not armed in the environment.")
+    try:
+        response = ai_model.generate_content(request.message)
+        return {"reply": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ========================== INTEGRATION STATUS ==========================
 @api_router.get("/integration-status")
 async def get_integration_status():
-    """Check status of all required integrations"""
-    
-    # FIX: Point directly to CLIENT_ID for DocuSign status
     docusign_configured = bool(os.environ.get('CLIENT_ID'))
-    
     return {
         "stripe": {
-            "configured": bool(os.environ.get('STRIPE_API_KEY')),
-            "status": "active" if os.environ.get('STRIPE_API_KEY') else "pending"
+            "configured": bool(os.environ.get('STRIPE_SECRET_KEY')),
+            "status": "active" if os.environ.get('STRIPE_SECRET_KEY') else "pending"
         },
-        "openai": {
-            "configured": bool(os.environ.get('EMERGENT_LLM_KEY')),
-            "status": "active" if os.environ.get('EMERGENT_LLM_KEY') else "pending"
-        },
-        "twilio": {
-            "configured": bool(os.environ.get('TWILIO_ACCOUNT_SID')),
-            "status": "active" if os.environ.get('TWILIO_ACCOUNT_SID') else "pending",
-            "instructions": "Provide TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER"
+        "gemini": {
+            "configured": bool(os.environ.get('GEMINI_API_KEY')),
+            "status": "active" if os.environ.get('GEMINI_API_KEY') else "pending"
         },
         "docusign": {
             "configured": docusign_configured,
             "status": "active" if docusign_configured else "pending",
             "instructions": "DocuSign Engine is Online and Authorized" if docusign_configured else "Provide CLIENT_ID for e-signatures"
-        },
-        "propstream": {
-            "configured": bool(os.environ.get('PROPSTREAM_API_KEY')),
-            "status": "active" if os.environ.get('PROPSTREAM_API_KEY') else "pending",
-            "instructions": "Provide PROPSTREAM_API_KEY for real property data"
-        },
-        "notarize": {
-            "configured": bool(os.environ.get('NOTARIZE_API_KEY')),
-            "status": "active" if os.environ.get('NOTARIZE_API_KEY') else "pending",
-            "instructions": "Provide NOTARIZE_API_KEY for remote online notarization"
         }
     }
 
