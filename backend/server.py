@@ -1,11 +1,11 @@
+import os
+import logging
+from pathlib import Path
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Header, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
-from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
@@ -19,13 +19,24 @@ import json
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
+# 1. Open the Environment Vault
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# 2. Check for Master Key
+key_path = os.getenv("PRIVATE_KEY_FILE", "private.pem")
+try:
+    with open(key_path, "r") as f:
+        private_key_contents = f.read()
+    print(f"🚀 Server initialized with key: {key_path}")
+except FileNotFoundError:
+    print(f"⚠️ Warning: Master key {key_path} not found.")
+
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017/sv-1500-db')
+db_name = os.environ.get('DB_NAME', 'sv-1500-db')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[db_name]
 
 # JWT Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'mo-deal-wholesaler-secret-key-2024')
@@ -39,7 +50,7 @@ GOOGLE_CLIENT_ID = "783162825648-1nllnud8mm7ibuflli1ttrhpd58oo7c8.apps.googleuse
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', 'sk_test_emergent')
 
 # Create the main app
-app = FastAPI(title="MO Deal Wholesaler API", version="1.0.0")
+app = FastAPI(title="Rodney & Sons OS API", version="1.0.0")
 
 # Create routers
 api_router = APIRouter(prefix="/api")
@@ -92,7 +103,6 @@ class OutreachStatus(str, Enum):
     FAILED = "failed"
 
 # ========================== MODELS ==========================
-# User Models
 class UserBase(BaseModel):
     email: EmailStr
     first_name: str
@@ -108,7 +118,6 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# NEW: Google Token Model
 class GoogleTokenAuth(BaseModel):
     token: str
 
@@ -142,7 +151,6 @@ class UserResponse(BaseModel):
     subscription_status: str
     created_at: str
     
-# Property Models
 class PropertyCreate(BaseModel):
     address: str
     city: str
@@ -183,7 +191,6 @@ class Property(PropertyCreate):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Contract Models
 class ContractCreate(BaseModel):
     property_id: str
     contract_type: str  # "purchase" or "assignment"
@@ -213,10 +220,9 @@ class Contract(ContractCreate):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Outreach Models
 class OutreachCreate(BaseModel):
     property_id: str
-    channel: str  # "sms", "voice", "email", "mail"
+    channel: str  
     message_template: str
     scheduled_at: Optional[datetime] = None
 
@@ -229,13 +235,12 @@ class Outreach(OutreachCreate):
     twilio_sid: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Payment Models
 class PaymentTransaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: Optional[str] = None
     email: Optional[str] = None
-    transaction_type: str  # "subscription", "emd", "assignment_fee"
+    transaction_type: str 
     amount: float
     currency: str = "usd"
     session_id: str
@@ -244,12 +249,11 @@ class PaymentTransaction(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Chat Models
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
-    role: str  # "user" or "assistant"
+    role: str  
     content: str
     property_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -258,9 +262,8 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     property_id: Optional[str] = None
-    context_type: str = "general"  # "seller_qualification", "property_analysis", "offer_generation"
+    context_type: str = "general"
 
-# Subscription Tiers
 SUBSCRIPTION_TIERS = {
     "bronze": {"price": 97.00, "name": "Bronze", "features": ["Email alerts", "24hr delayed deals", "Basic property info"]},
     "silver": {"price": 297.00, "name": "Silver", "features": ["Real-time alerts", "Instant access", "Full due diligence packets", "Comp reports"]},
@@ -304,8 +307,6 @@ async def get_admin_user(user: Dict = Depends(get_current_user)) -> Dict:
 # ========================== DISTRESS SCORE CALCULATOR ==========================
 def calculate_distress_score(property_data: Dict) -> int:
     score = 0
-    
-    # Tax delinquency (20%)
     tax_years = property_data.get("tax_delinquency_years", 0)
     if tax_years >= 3:
         score += 20
@@ -314,26 +315,21 @@ def calculate_distress_score(property_data: Dict) -> int:
     elif tax_years >= 1:
         score += 10
     
-    # Vacancy indicators (15%)
     vacancy = len(property_data.get("vacancy_indicators", []))
     score += min(vacancy * 5, 15)
     
-    # Code violations (15%)
     violations = len(property_data.get("code_violations", []))
     score += min(violations * 5, 15)
     
-    # Owner situation (15%)
     owner_address = property_data.get("owner_address", "")
     if owner_address and property_data.get("state", "MO") not in owner_address:
-        score += 15  # Out of state owner
+        score += 15
     elif property_data.get("notes") and any(w in property_data.get("notes", "").lower() for w in ["estate", "probate", "deceased", "divorce"]):
         score += 15
     
-    # Liens and judgments (15%)
     liens = len(property_data.get("liens", []))
     score += min(liens * 5, 15)
     
-    # Physical condition estimate (20%)
     if property_data.get("estimated_repairs", 0) > 50000:
         score += 20
     elif property_data.get("estimated_repairs", 0) > 25000:
@@ -349,7 +345,7 @@ def calculate_fees(contracted_price: float, investor_price: float, expedited: bo
     percentage_fee = investor_price * 0.15
     flat_fee = 10000
     
-    assignment_fee = max(flat_fee, percentage_fee, 5000)  # Minimum $5000
+    assignment_fee = max(flat_fee, percentage_fee, 5000)
     coordination_fee = 795
     expedited_fee = 1500 if expedited else 0
     
@@ -363,13 +359,9 @@ def calculate_fees(contracted_price: float, investor_price: float, expedited: bo
     }
 
 # ========================== AUTH ROUTES ==========================
-
-# ---> NEW GOOGLE AUTH ROUTE <---
 @auth_router.post("/google")
 async def google_auth(request: GoogleTokenAuth):
-    """Verifies Google JWT and logs user in (or creates new account)"""
     try:
-        # 1. Verify token with Google's servers
         idinfo = id_token.verify_oauth2_token(
             request.token, google_requests.Request(), GOOGLE_CLIENT_ID
         )
@@ -381,11 +373,9 @@ async def google_auth(request: GoogleTokenAuth):
         if not email:
             raise HTTPException(status_code=400, detail="Email not provided by Google")
 
-        # 2. Check if user exists in Database
         user = await db.users.find_one({"email": email}, {"_id": 0})
         
         if not user:
-            # 3. AUTO-REGISTER NEW USER
             new_user = User(
                 email=email,
                 first_name=first_name,
@@ -394,7 +384,6 @@ async def google_auth(request: GoogleTokenAuth):
             )
             
             user_dict = new_user.model_dump()
-            # Generate a random dummy password since they use Google
             user_dict["password_hash"] = hash_password(str(uuid.uuid4())) 
             user_dict["created_at"] = user_dict["created_at"].isoformat()
             user_dict["updated_at"] = user_dict["updated_at"].isoformat()
@@ -402,7 +391,6 @@ async def google_auth(request: GoogleTokenAuth):
             await db.users.insert_one(user_dict)
             user = user_dict
             
-        # 4. Generate our App JWT Token for the Dashboard
         token = create_token(user["id"], user["email"], user.get("is_admin", False))
         user.pop("password_hash", None)
         
@@ -492,7 +480,6 @@ async def get_properties(
     if county:
         query["county"] = {"$regex": county, "$options": "i"}
     
-    # Tier-based access control
     tier = user.get("tier", "bronze")
     if tier == "bronze":
         query["status"] = {"$in": [PropertyStatus.NEW.value, PropertyStatus.CONTACTED.value]}
@@ -530,7 +517,6 @@ async def delete_property(property_id: str, user: Dict = Depends(get_admin_user)
 
 @properties_router.post("/{property_id}/analyze")
 async def analyze_property(property_id: str, user: Dict = Depends(get_current_user)):
-    """AI-powered property analysis using GPT-5.2"""
     prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
@@ -569,13 +555,6 @@ Lot Size: {prop.get('lot_size')} acres
 Distress Indicators:
 - Tax Delinquency: {prop.get('tax_delinquency_years')} years (${prop.get('tax_delinquency_amount')})
 - Assessed Value: ${prop.get('assessed_value')}
-- Code Violations: {', '.join(prop.get('code_violations', [])) or 'None reported'}
-- Vacancy Indicators: {', '.join(prop.get('vacancy_indicators', [])) or 'None'}
-- Liens: {len(prop.get('liens', []))} liens on record
-
-Current Estimates:
-- Estimated ARV: ${prop.get('estimated_arv')}
-- Estimated Repairs: ${prop.get('estimated_repairs')}
 - DistressScore: {prop.get('distress_score')}/100
 
 Notes: {prop.get('notes', 'None')}
@@ -598,14 +577,12 @@ Provide a comprehensive investment analysis with specific recommendations."""
 # ========================== CONTRACT ROUTES ==========================
 @contracts_router.post("")
 async def create_contract(contract_data: ContractCreate, user: Dict = Depends(get_current_user)):
-    # Verify property exists
     prop = await db.properties.find_one({"id": contract_data.property_id}, {"_id": 0})
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
     
     contract = Contract(**contract_data.model_dump())
     
-    # Calculate fees for assignment contracts
     if contract_data.contract_type == "assignment":
         fees = calculate_fees(
             prop.get("contracted_price", contract_data.purchase_price),
@@ -633,7 +610,6 @@ async def get_contracts(
     if property_id:
         query["property_id"] = property_id
     
-    # Non-admin users only see their own contracts or contracts where they're the buyer
     if not user.get("is_admin"):
         query["$or"] = [{"buyer_id": user["id"]}, {"buyer_email": user["email"]}]
     
@@ -666,16 +642,16 @@ async def send_for_signature(contract_id: str, user: Dict = Depends(get_admin_us
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     
-    # Check for DocuSign configuration
-    docusign_key = os.environ.get('DOCUSIGN_API_KEY')
+    # FIX: Point directly to CLIENT_ID from your .env
+    docusign_key = os.environ.get('CLIENT_ID')
+    
     if not docusign_key:
         return {
-            "message": "DocuSign integration pending - API key required",
+            "message": "DocuSign integration pending - CLIENT_ID required",
             "status": "pending_integration",
-            "instructions": "Please provide DocuSign API credentials to enable e-signatures"
+            "instructions": "Please provide your DocuSign CLIENT_ID to enable e-signatures"
         }
     
-    # TODO: Implement DocuSign integration when key is provided
     await db.contracts.update_one(
         {"id": contract_id},
         {"$set": {"status": ContractStatus.SENT.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
@@ -686,17 +662,14 @@ async def send_for_signature(contract_id: str, user: Dict = Depends(get_admin_us
 # ========================== INVESTOR ROUTES ==========================
 @investors_router.get("/deals")
 async def get_available_deals(user: Dict = Depends(get_current_user)):
-    """Get deals available to the investor based on their tier"""
     tier = user.get("tier", "bronze")
     query = {"status": {"$in": [PropertyStatus.UNDER_CONTRACT.value]}}
     
-    # Tier-based filtering
     tier_priority = {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
     user_priority = tier_priority.get(tier, 1)
     
     properties = await db.properties.find(query, {"_id": 0}).to_list(50)
     
-    # Format as deal cards
     deals = []
     for prop in properties:
         deal = {
@@ -715,7 +688,6 @@ async def get_available_deals(user: Dict = Depends(get_current_user)):
             "photos": prop.get("photos", [])[:1] if tier == "bronze" else prop.get("photos", []),
         }
         
-        # Higher tiers get more info
         if user_priority >= 2:
             deal["full_due_diligence"] = True
             deal["owner_motivation"] = prop.get("notes")
@@ -731,7 +703,6 @@ async def get_available_deals(user: Dict = Depends(get_current_user)):
 
 @investors_router.post("/deals/{property_id}/lock")
 async def lock_deal(property_id: str, user: Dict = Depends(get_current_user)):
-    """Lock a deal with EMD - first qualified investor wins"""
     prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
@@ -739,7 +710,6 @@ async def lock_deal(property_id: str, user: Dict = Depends(get_current_user)):
     if prop.get("acquired_by_investor_id"):
         raise HTTPException(status_code=400, detail="Deal already locked by another investor")
     
-    # Calculate required EMD
     investor_price = prop.get("investor_price", 0)
     fees = calculate_fees(prop.get("contracted_price", 0), investor_price)
     required_emd = max(fees["assignment_fee"] * 0.5, 2500)
@@ -756,19 +726,17 @@ async def lock_deal(property_id: str, user: Dict = Depends(get_current_user)):
 
 @investors_router.get("/subscription-tiers")
 async def get_subscription_tiers():
-    """Get available subscription tiers and pricing"""
     return {"tiers": SUBSCRIPTION_TIERS}
 
 # ========================== PAYMENT ROUTES ==========================
 @payments_router.post("/create-checkout")
 async def create_checkout_session(
     request: Request,
-    payment_type: str,  # "subscription" or "emd"
+    payment_type: str,  
     tier: Optional[str] = None,
     property_id: Optional[str] = None,
     user: Dict = Depends(get_current_user)
 ):
-    """Create Stripe checkout session for subscription or EMD"""
     try:
         from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
         
@@ -777,7 +745,6 @@ async def create_checkout_session(
         
         stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
         
-        # Determine amount based on payment type
         if payment_type == "subscription":
             if not tier or tier not in SUBSCRIPTION_TIERS:
                 raise HTTPException(status_code=400, detail="Invalid subscription tier")
@@ -797,7 +764,6 @@ async def create_checkout_session(
         else:
             raise HTTPException(status_code=400, detail="Invalid payment type")
         
-        # Get frontend origin from request
         origin = request.headers.get("origin", host_url)
         success_url = f"{origin}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{origin}/payment-cancelled"
@@ -812,7 +778,6 @@ async def create_checkout_session(
         
         session = await stripe_checkout.create_checkout_session(checkout_request)
         
-        # Create payment transaction record
         transaction = PaymentTransaction(
             user_id=user["id"],
             email=user["email"],
@@ -838,14 +803,12 @@ async def create_checkout_session(
 
 @payments_router.get("/status/{session_id}")
 async def get_payment_status(session_id: str, user: Dict = Depends(get_current_user)):
-    """Check payment status and update database"""
     try:
         from emergentintegrations.payments.stripe.checkout import StripeCheckout
         
         stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
         status = await stripe_checkout.get_checkout_status(session_id)
         
-        # Update transaction record
         transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
         if transaction and transaction.get("payment_status") != "paid":
             new_status = status.payment_status
@@ -859,12 +822,10 @@ async def get_payment_status(session_id: str, user: Dict = Depends(get_current_u
                 {"$set": update_data}
             )
             
-            # Handle successful payment
             if new_status == "paid":
                 metadata = transaction.get("metadata", {})
                 
                 if metadata.get("type") == "subscription":
-                    # Activate subscription
                     tier = metadata.get("tier")
                     await db.users.update_one(
                         {"id": transaction["user_id"]},
@@ -875,7 +836,6 @@ async def get_payment_status(session_id: str, user: Dict = Depends(get_current_u
                         }}
                     )
                 elif metadata.get("type") == "emd":
-                    # Lock the deal
                     property_id = metadata.get("property_id")
                     await db.properties.update_one(
                         {"id": property_id},
@@ -890,7 +850,7 @@ async def get_payment_status(session_id: str, user: Dict = Depends(get_current_u
             "session_id": session_id,
             "status": status.status,
             "payment_status": status.payment_status,
-            "amount": status.amount_total / 100,  # Convert from cents
+            "amount": status.amount_total / 100,  
             "currency": status.currency
         }
         
@@ -900,7 +860,6 @@ async def get_payment_status(session_id: str, user: Dict = Depends(get_current_u
 
 @payments_router.get("/history")
 async def get_payment_history(user: Dict = Depends(get_current_user)):
-    """Get user's payment history"""
     transactions = await db.payment_transactions.find(
         {"user_id": user["id"]},
         {"_id": 0}
@@ -911,7 +870,6 @@ async def get_payment_history(user: Dict = Depends(get_current_user)):
 # ========================== WEBHOOK ROUTE ==========================
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhooks"""
     try:
         from emergentintegrations.payments.stripe.checkout import StripeCheckout
         
@@ -920,8 +878,6 @@ async def stripe_webhook(request: Request):
         
         stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
         webhook_response = await stripe_checkout.handle_webhook(body, signature)
-        
-        logger.info(f"Webhook received: {webhook_response.event_type}")
         
         if webhook_response.payment_status == "paid":
             session_id = webhook_response.session_id
@@ -938,433 +894,14 @@ async def stripe_webhook(request: Request):
         logger.error(f"Webhook error: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-# ========================== OUTREACH ROUTES ==========================
-@outreach_router.post("/campaigns")
-async def create_outreach_campaign(
-    property_ids: List[str],
-    channel: str,
-    message_template: str,
-    user: Dict = Depends(get_admin_user)
-):
-    """Create outreach campaign for multiple properties"""
-    campaigns = []
-    
-    for property_id in property_ids:
-        prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
-        if not prop:
-            continue
-        
-        outreach = Outreach(
-            property_id=property_id,
-            channel=channel,
-            message_template=message_template
-        )
-        
-        outreach_dict = outreach.model_dump()
-        outreach_dict["created_at"] = outreach_dict["created_at"].isoformat()
-        
-        await db.outreach_campaigns.insert_one(outreach_dict)
-        campaigns.append(outreach_dict)
-    
-    return {"campaigns_created": len(campaigns), "campaigns": campaigns}
-
-@outreach_router.post("/send/{outreach_id}")
-async def send_outreach(outreach_id: str, user: Dict = Depends(get_admin_user)):
-    """Send outreach message via Twilio"""
-    outreach = await db.outreach_campaigns.find_one({"id": outreach_id}, {"_id": 0})
-    if not outreach:
-        raise HTTPException(status_code=404, detail="Outreach campaign not found")
-    
-    # Check Twilio configuration
-    twilio_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-    twilio_token = os.environ.get('TWILIO_AUTH_TOKEN')
-    
-    if not twilio_sid or not twilio_token:
-        return {
-            "message": "Twilio integration pending - API credentials required",
-            "status": "pending_integration",
-            "instructions": "Please provide Twilio Account SID and Auth Token to enable SMS/Voice outreach"
-        }
-    
-    # Get property owner contact
-    prop = await db.properties.find_one({"id": outreach["property_id"]}, {"_id": 0})
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    owner_phone = prop.get("owner_phone")
-    if not owner_phone:
-        raise HTTPException(status_code=400, detail="Owner phone number not available")
-    
-    try:
-        from twilio.rest import Client
-        
-        client = Client(twilio_sid, twilio_token)
-        twilio_phone = os.environ.get('TWILIO_PHONE_NUMBER')
-        
-        if outreach["channel"] == "sms":
-            message = client.messages.create(
-                body=outreach["message_template"].replace("{{address}}", prop.get("address", "")),
-                from_=twilio_phone,
-                to=owner_phone
-            )
-            
-            await db.outreach_campaigns.update_one(
-                {"id": outreach_id},
-                {"$set": {
-                    "status": OutreachStatus.SENT.value,
-                    "sent_at": datetime.now(timezone.utc).isoformat(),
-                    "twilio_sid": message.sid
-                }}
-            )
-            
-            return {"message": "SMS sent", "sid": message.sid}
-        
-        return {"message": "Channel not implemented yet"}
-        
-    except Exception as e:
-        logger.error(f"Twilio error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@outreach_router.get("/campaigns")
-async def get_outreach_campaigns(user: Dict = Depends(get_admin_user)):
-    """Get all outreach campaigns"""
-    campaigns = await db.outreach_campaigns.find({}, {"_id": 0}).to_list(100)
-    return {"campaigns": campaigns}
-
-# ========================== AI CHAT ROUTES ==========================
-@chat_router.post("/message")
-async def send_chat_message(chat_req: ChatRequest, user: Dict = Depends(get_current_user)):
-    """Send message to AI assistant for seller qualification or property analysis"""
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        api_key = os.environ.get('EMERGENT_LLM_KEY')
-        if not api_key:
-            raise HTTPException(status_code=500, detail="AI service not configured")
-        
-        session_id = chat_req.session_id or f"chat-{user['id']}-{str(uuid.uuid4())[:8]}"
-        
-        # Define system message based on context type
-        system_messages = {
-            "seller_qualification": """You are a professional real estate acquisitions specialist for MO Deal Wholesaler in Missouri.
-            Your role is to qualify motivated sellers and gather information about their property and situation.
-            Be friendly but professional. Ask about:
-            - Property condition (1-10 scale)
-            - Timeline/motivation for selling
-            - Ownership situation (sole owner, estate, divorce, etc.)
-            - Asking price expectations
-            - Property access for inspection
-            Always clarify that you are a direct buyer, not a real estate agent.""",
-            
-            "property_analysis": """You are an expert real estate investment analyst specializing in Missouri wholesale deals.
-            Analyze properties for: ARV, repair costs, comparable sales, risk factors, and recommended offer prices.
-            Use the 70% rule: MAO = ARV * 0.70 - Repairs - Wholesale Fee
-            Be specific with numbers and provide actionable insights.""",
-            
-            "offer_generation": """You are a deal structuring expert for MO Deal Wholesaler.
-            Help generate competitive offer presentations with 3 tiers:
-            1. AS-IS CASH: 70% ARV - repairs - margin
-            2. EXTENDED CLOSE: 75% ARV - repairs, 45-day close
-            3. SELLER FINANCING: 80% ARV, 5% down, 8% interest, 5-year balloon
-            Explain benefits of each option to the seller.""",
-            
-            "general": """You are an AI assistant for MO Deal Wholesaler, a Missouri real estate wholesaling platform.
-            Help users with questions about wholesaling, property analysis, deal structuring, and platform features.
-            Be knowledgeable about Missouri real estate law, wholesaling best practices, and investment strategies."""
-        }
-        
-        system_message = system_messages.get(chat_req.context_type, system_messages["general"])
-        
-        # Add property context if available
-        if chat_req.property_id:
-            prop = await db.properties.find_one({"id": chat_req.property_id}, {"_id": 0})
-            if prop:
-                system_message += f"\n\nProperty Context:\nAddress: {prop.get('address')}, {prop.get('city')}, MO\nDistressScore: {prop.get('distress_score')}/100\nEstimated ARV: ${prop.get('estimated_arv')}\nEstimated Repairs: ${prop.get('estimated_repairs')}"
-        
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=session_id,
-            system_message=system_message
-        ).with_model("openai", "gpt-5.2")
-        
-        # Get chat history for context
-        history = await db.chat_messages.find(
-            {"session_id": session_id},
-            {"_id": 0}
-        ).sort("created_at", 1).to_list(20)
-        
-        response = await chat.send_message(UserMessage(text=chat_req.message))
-        
-        # Store messages
-        user_msg = ChatMessage(
-            session_id=session_id,
-            role="user",
-            content=chat_req.message,
-            property_id=chat_req.property_id
-        )
-        assistant_msg = ChatMessage(
-            session_id=session_id,
-            role="assistant",
-            content=response,
-            property_id=chat_req.property_id
-        )
-        
-        for msg in [user_msg, assistant_msg]:
-            msg_dict = msg.model_dump()
-            msg_dict["created_at"] = msg_dict["created_at"].isoformat()
-            await db.chat_messages.insert_one(msg_dict)
-        
-        return {
-            "session_id": session_id,
-            "response": response,
-            "context_type": chat_req.context_type
-        }
-        
-    except ImportError:
-        raise HTTPException(status_code=500, detail="AI integration not available")
-    except Exception as e:
-        logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@chat_router.get("/history/{session_id}")
-async def get_chat_history(session_id: str, user: Dict = Depends(get_current_user)):
-    """Get chat history for a session"""
-    messages = await db.chat_messages.find(
-        {"session_id": session_id},
-        {"_id": 0}
-    ).sort("created_at", 1).to_list(100)
-    
-    return {"session_id": session_id, "messages": messages}
-
-# ========================== CLOSING ROUTES ==========================
-@closing_router.post("/initiate/{contract_id}")
-async def initiate_closing(contract_id: str, user: Dict = Depends(get_admin_user)):
-    """Initiate closing process with title company"""
-    contract = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
-    if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
-    
-    prop = await db.properties.find_one({"id": contract["property_id"]}, {"_id": 0})
-    
-    # Create closing record
-    closing = {
-        "id": str(uuid.uuid4()),
-        "contract_id": contract_id,
-        "property_id": contract["property_id"],
-        "status": "initiated",
-        "title_company": None,
-        "escrow_officer": None,
-        "title_search_ordered": False,
-        "title_search_complete": False,
-        "closing_scheduled": False,
-        "closing_date": None,
-        "funds_received": False,
-        "deed_recorded": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.closing_transactions.insert_one(closing)
-    
-    return {
-        "closing_id": closing["id"],
-        "status": "initiated",
-        "next_steps": [
-            "Select title company",
-            "Order title search",
-            "Schedule closing date",
-            "Coordinate fund transfers"
-        ]
-    }
-
-@closing_router.put("/{closing_id}")
-async def update_closing(closing_id: str, updates: Dict, user: Dict = Depends(get_admin_user)):
-    """Update closing transaction"""
-    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
-    await db.closing_transactions.update_one({"id": closing_id}, {"$set": updates})
-    return {"message": "Closing updated"}
-
-@closing_router.get("")
-async def get_closings(user: Dict = Depends(get_admin_user)):
-    """Get all closing transactions"""
-    closings = await db.closing_transactions.find({}, {"_id": 0}).to_list(100)
-    return {"closings": closings}
-
-# ========================== ADMIN ROUTES ==========================
-@admin_router.get("/dashboard")
-async def get_admin_dashboard(user: Dict = Depends(get_admin_user)):
-    """Get admin dashboard statistics"""
-    # Pipeline stats
-    total_properties = await db.properties.count_documents({})
-    properties_by_status = {}
-    for status in PropertyStatus:
-        count = await db.properties.count_documents({"status": status.value})
-        properties_by_status[status.value] = count
-    
-    # Revenue stats
-    paid_transactions = await db.payment_transactions.find(
-        {"payment_status": "paid"},
-        {"_id": 0}
-    ).to_list(1000)
-    
-    total_revenue = sum(t.get("amount", 0) for t in paid_transactions)
-    subscription_revenue = sum(t.get("amount", 0) for t in paid_transactions if t.get("metadata", {}).get("type") == "subscription")
-    emd_collected = sum(t.get("amount", 0) for t in paid_transactions if t.get("metadata", {}).get("type") == "emd")
-    
-    # User stats
-    total_investors = await db.users.count_documents({"is_admin": False})
-    active_subscribers = await db.users.count_documents({"subscription_status": "active"})
-    
-    investors_by_tier = {}
-    for tier in InvestorTier:
-        count = await db.users.count_documents({"tier": tier.value, "is_admin": False})
-        investors_by_tier[tier.value] = count
-    
-    # Contract stats
-    total_contracts = await db.contracts.count_documents({})
-    closed_contracts = await db.contracts.count_documents({"status": ContractStatus.CLOSED.value})
-    
-    return {
-        "properties": {
-            "total": total_properties,
-            "by_status": properties_by_status
-        },
-        "revenue": {
-            "total": total_revenue,
-            "subscriptions": subscription_revenue,
-            "emd_collected": emd_collected
-        },
-        "investors": {
-            "total": total_investors,
-            "active_subscribers": active_subscribers,
-            "by_tier": investors_by_tier
-        },
-        "contracts": {
-            "total": total_contracts,
-            "closed": closed_contracts
-        }
-    }
-
-@admin_router.get("/users")
-async def get_all_users(user: Dict = Depends(get_admin_user)):
-    """Get all users (admin only)"""
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(500)
-    return {"users": users}
-
-@admin_router.put("/users/{user_id}/tier")
-async def update_user_tier(user_id: str, tier: str, admin: Dict = Depends(get_admin_user)):
-    """Update user's subscription tier"""
-    valid_tiers = [t.value for t in InvestorTier]
-    if tier not in valid_tiers:
-        raise HTTPException(status_code=400, detail=f"Invalid tier. Must be one of: {valid_tiers}")
-    
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {"tier": tier, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    return {"message": f"User tier updated to {tier}"}
-
-@admin_router.post("/seed-demo-data")
-async def seed_demo_data(user: Dict = Depends(get_admin_user)):
-    """Seed database with sample Missouri properties"""
-    sample_properties = [
-        {
-            "address": "1234 Troost Ave",
-            "city": "Kansas City",
-            "state": "MO",
-            "zip_code": "64110",
-            "county": "Jackson",
-            "property_type": "single_family",
-            "bedrooms": 3,
-            "bathrooms": 1.5,
-            "sqft": 1200,
-            "year_built": 1955,
-            "owner_name": "Estate of James Wilson",
-            "owner_phone": "+15551234567",
-            "owner_address": "456 Oak St, Dallas, TX 75201",
-            "tax_delinquency_years": 3,
-            "tax_delinquency_amount": 8500,
-            "assessed_value": 45000,
-            "estimated_arv": 125000,
-            "estimated_repairs": 35000,
-            "vacancy_indicators": ["USPS vacant", "Utilities disconnected"],
-            "code_violations": ["Overgrown vegetation", "Broken windows"],
-            "liens": [{"type": "tax", "amount": 8500}],
-            "notes": "Estate property, out-of-state heirs. Motivated to sell."
-        },
-        {
-            "address": "5678 Delmar Blvd",
-            "city": "St. Louis",
-            "state": "MO",
-            "zip_code": "63112",
-            "county": "St. Louis City",
-            "property_type": "duplex",
-            "bedrooms": 4,
-            "bathrooms": 2,
-            "sqft": 2400,
-            "year_built": 1920,
-            "owner_name": "Robert Johnson",
-            "owner_phone": "+15559876543",
-            "owner_address": "789 Pine St, Chicago, IL 60601",
-            "tax_delinquency_years": 2,
-            "tax_delinquency_amount": 12000,
-            "assessed_value": 65000,
-            "estimated_arv": 180000,
-            "estimated_repairs": 50000,
-            "vacancy_indicators": ["Mail accumulation", "Boarded windows"],
-            "code_violations": ["Structural damage", "Roof damage"],
-            "liens": [{"type": "tax", "amount": 12000}, {"type": "mechanic", "amount": 5000}],
-            "notes": "Landlord burnout, extensive repairs needed. Open to terms."
-        },
-        {
-            "address": "910 Campbell Ave",
-            "city": "Springfield",
-            "state": "MO",
-            "zip_code": "65802",
-            "county": "Greene",
-            "property_type": "single_family",
-            "bedrooms": 4,
-            "bathrooms": 2,
-            "sqft": 1800,
-            "year_built": 1970,
-            "owner_name": "Mary Thompson",
-            "owner_phone": "+15552345678",
-            "owner_address": "910 Campbell Ave, Springfield, MO 65802",
-            "tax_delinquency_years": 1,
-            "tax_delinquency_amount": 3200,
-            "assessed_value": 85000,
-            "estimated_arv": 165000,
-            "estimated_repairs": 25000,
-            "vacancy_indicators": [],
-            "code_violations": ["Peeling paint"],
-            "liens": [],
-            "notes": "Divorce situation, needs quick sale. Cooperative seller."
-        }
-    ]
-    
-    created = 0
-    for prop_data in sample_properties:
-        existing = await db.properties.find_one({"address": prop_data["address"]})
-        if not existing:
-            prop = Property(**prop_data)
-            prop.distress_score = calculate_distress_score(prop_data)
-            prop.contracted_price = prop_data["estimated_arv"] * 0.65 - prop_data["estimated_repairs"]
-            prop.investor_price = prop.contracted_price + 12000  # Default assignment fee
-            prop.status = PropertyStatus.UNDER_CONTRACT
-            
-            prop_dict = prop.model_dump()
-            prop_dict["created_at"] = prop_dict["created_at"].isoformat()
-            prop_dict["updated_at"] = prop_dict["updated_at"].isoformat()
-            
-            await db.properties.insert_one(prop_dict)
-            created += 1
-    
-    return {"message": f"Seeded {created} sample properties"}
-
 # ========================== INTEGRATION STATUS ==========================
 @api_router.get("/integration-status")
 async def get_integration_status():
     """Check status of all required integrations"""
+    
+    # FIX: Point directly to CLIENT_ID for DocuSign status
+    docusign_configured = bool(os.environ.get('CLIENT_ID'))
+    
     return {
         "stripe": {
             "configured": bool(os.environ.get('STRIPE_API_KEY')),
@@ -1380,9 +917,9 @@ async def get_integration_status():
             "instructions": "Provide TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER"
         },
         "docusign": {
-            "configured": bool(os.environ.get('DOCUSIGN_API_KEY')),
-            "status": "active" if os.environ.get('DOCUSIGN_API_KEY') else "pending",
-            "instructions": "Provide DOCUSIGN_API_KEY for e-signatures"
+            "configured": docusign_configured,
+            "status": "active" if docusign_configured else "pending",
+            "instructions": "DocuSign Engine is Online and Authorized" if docusign_configured else "Provide CLIENT_ID for e-signatures"
         },
         "propstream": {
             "configured": bool(os.environ.get('PROPSTREAM_API_KEY')),
@@ -1408,269 +945,6 @@ app.include_router(chat_router)
 app.include_router(closing_router)
 app.include_router(admin_router)
 app.include_router(integrations_router)
-
-# ========================== EXTERNAL INTEGRATIONS ROUTES ==========================
-@integrations_router.get("/propstream/status")
-async def propstream_status(user: Dict = Depends(get_admin_user)):
-    """Check PropStream API configuration status"""
-    try:
-        from integrations.propstream import propstream_client
-        return {
-            "service": "PropStream",
-            "configured": propstream_client.is_configured,
-            "description": "Missouri property data and skip tracing",
-            "cost": "$150-400/month + $500 setup",
-            "how_to_get": "Call (888) 776-9527 -> Request API access -> Sign data agreement"
-        }
-    except ImportError:
-        return {"service": "PropStream", "configured": False, "error": "Module not loaded"}
-
-@integrations_router.post("/propstream/search")
-async def propstream_search(
-    counties: List[str] = None,
-    min_equity: int = 30,
-    limit: int = 100,
-    user: Dict = Depends(get_admin_user)
-):
-    """Search Missouri distressed properties via PropStream"""
-    try:
-        from integrations.propstream import propstream_client
-        result = await propstream_client.search_distressed_properties(
-            counties=counties,
-            min_equity_percent=min_equity,
-            limit=limit
-        )
-        return result
-    except ImportError:
-        return {"status": "error", "message": "PropStream module not available"}
-
-@integrations_router.get("/twilio/status")
-async def twilio_status(user: Dict = Depends(get_admin_user)):
-    """Check Twilio configuration status"""
-    try:
-        from integrations.twilio_outreach import twilio_client
-        return {
-            "service": "Twilio",
-            "configured": twilio_client.is_configured,
-            "description": "SMS and voice outreach to property owners",
-            "cost": "Pay-as-you-go: $0.0075/SMS, $0.013/min voice",
-            "how_to_get": "twilio.com/try-twilio -> Instant trial key -> Upgrade for production"
-        }
-    except ImportError:
-        return {"service": "Twilio", "configured": False, "error": "Module not loaded"}
-
-@integrations_router.post("/twilio/send-sms")
-async def send_twilio_sms(
-    property_id: str,
-    day: int = 0,
-    user: Dict = Depends(get_admin_user)
-):
-    """Send SMS to property owner"""
-    try:
-        from integrations.twilio_outreach import twilio_client, OutreachDay
-        
-        prop = await db.properties.find_one({"id": property_id}, {"_id": 0})
-        if not prop:
-            raise HTTPException(status_code=404, detail="Property not found")
-        
-        if not prop.get("owner_phone"):
-            raise HTTPException(status_code=400, detail="Owner phone not available")
-        
-        owner_name = prop.get("owner_name", "Property Owner")
-        owner_first_name = owner_name.split()[0] if owner_name else "there"
-        
-        property_data = {
-            "owner_first_name": owner_first_name,
-            "property_address": prop.get("address"),
-            "city": prop.get("city"),
-            "county": prop.get("county")
-        }
-        
-        outreach_day = OutreachDay(day) if day in [0, 2, 4] else OutreachDay.DAY_0
-        result = await twilio_client.send_sms(prop["owner_phone"], property_data, outreach_day)
-        return result
-        
-    except ImportError:
-        return {"status": "error", "message": "Twilio module not available"}
-
-@integrations_router.get("/docusign/status")
-async def docusign_status(user: Dict = Depends(get_admin_user)):
-    """Check DocuSign configuration status"""
-    try:
-        from integrations.docusign_contracts import docusign_client
-        return {
-            "service": "DocuSign",
-            "configured": docusign_client.is_configured,
-            "description": "E-signatures for purchase and assignment contracts",
-            "cost": "$25-50/month",
-            "how_to_get": "developers.docusign.com -> Create dev account -> Apply for production"
-        }
-    except ImportError:
-        return {"service": "DocuSign", "configured": False, "error": "Module not loaded"}
-
-@integrations_router.post("/docusign/create-envelope")
-async def create_docusign_envelope(
-    contract_id: str,
-    user: Dict = Depends(get_admin_user)
-):
-    """Create DocuSign envelope for contract signing"""
-    try:
-        from integrations.docusign_contracts import docusign_client
-        
-        contract = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
-        if not contract:
-            raise HTTPException(status_code=404, detail="Contract not found")
-        
-        prop = await db.properties.find_one({"id": contract["property_id"]}, {"_id": 0})
-        
-        signers = []
-        if contract.get("seller_email"):
-            signers.append({
-                "email": contract["seller_email"],
-                "name": contract.get("seller_name", "Seller"),
-                "role": "seller"
-            })
-        if contract.get("buyer_id"):
-            buyer = await db.users.find_one({"id": contract["buyer_id"]}, {"_id": 0, "password_hash": 0})
-            if buyer:
-                signers.append({
-                    "email": buyer["email"],
-                    "name": f"{buyer['first_name']} {buyer['last_name']}",
-                    "role": "buyer"
-                })
-        
-        result = await docusign_client.create_envelope(
-            template_type=contract.get("contract_type", "purchase_agreement"),
-            contract_data={
-                "property_address": prop.get("address") if prop else "N/A",
-                "purchase_price": contract.get("purchase_price"),
-                "earnest_money": contract.get("earnest_money_deposit"),
-                "closing_days": contract.get("closing_days")
-            },
-            signers=signers,
-            property_year_built=prop.get("year_built") if prop else None
-        )
-        return result
-        
-    except ImportError:
-        return {"status": "error", "message": "DocuSign module not available"}
-
-@integrations_router.get("/notarize/status")
-async def notarize_status(user: Dict = Depends(get_admin_user)):
-    """Check Notarize.com configuration status"""
-    try:
-        from integrations.notarize_ron import notarize_client, MISSOURI_RON_REQUIREMENTS
-        return {
-            "service": "Notarize.com",
-            "configured": notarize_client.is_configured,
-            "description": "Remote Online Notarization for Missouri deeds",
-            "cost": "$25 per notarization",
-            "how_to_get": "notarize.com/business -> Schedule sales call -> API agreement",
-            "missouri_ron": MISSOURI_RON_REQUIREMENTS
-        }
-    except ImportError:
-        return {"service": "Notarize", "configured": False, "error": "Module not loaded"}
-
-@integrations_router.post("/notarize/create-session")
-async def create_notarize_session(
-    closing_id: str,
-    document_type: str = "warranty_deed",
-    user: Dict = Depends(get_admin_user)
-):
-    """Create remote notarization session"""
-    try:
-        from integrations.notarize_ron import notarize_client
-        
-        closing = await db.closing_transactions.find_one({"id": closing_id}, {"_id": 0})
-        if not closing:
-            raise HTTPException(status_code=404, detail="Closing not found")
-        
-        contract = await db.contracts.find_one({"id": closing["contract_id"]}, {"_id": 0})
-        prop = await db.properties.find_one({"id": closing["property_id"]}, {"_id": 0})
-        
-        result = await notarize_client.create_notarization_session(
-            document_type=document_type,
-            signer_info={
-                "name": contract.get("seller_name") if contract else "Seller",
-                "email": contract.get("seller_email") if contract else "",
-                "phone": prop.get("owner_phone") if prop else ""
-            },
-            document_url="",  # Would be actual signed document URL
-            property_address=prop.get("address") if prop else "N/A"
-        )
-        return result
-        
-    except ImportError:
-        return {"status": "error", "message": "Notarize module not available"}
-
-@integrations_router.get("/all-status")
-async def all_integrations_status(user: Dict = Depends(get_admin_user)):
-    """Get status of all external integrations"""
-    statuses = []
-    
-    # PropStream
-    try:
-        from integrations.propstream import propstream_client
-        statuses.append({
-            "service": "PropStream",
-            "configured": propstream_client.is_configured,
-            "purpose": "Property data & skip tracing",
-            "priority": "HIGH - Required for real property data"
-        })
-    except:
-        statuses.append({"service": "PropStream", "configured": False, "error": "Module error"})
-    
-    # Twilio
-    try:
-        from integrations.twilio_outreach import twilio_client
-        statuses.append({
-            "service": "Twilio",
-            "configured": twilio_client.is_configured,
-            "purpose": "SMS/Voice seller outreach",
-            "priority": "HIGH - Required for automated outreach"
-        })
-    except:
-        statuses.append({"service": "Twilio", "configured": False, "error": "Module error"})
-    
-    # DocuSign
-    try:
-        from integrations.docusign_contracts import docusign_client
-        statuses.append({
-            "service": "DocuSign",
-            "configured": docusign_client.is_configured,
-            "purpose": "E-signatures on contracts",
-            "priority": "HIGH - Required for contract execution"
-        })
-    except:
-        statuses.append({"service": "DocuSign", "configured": False, "error": "Module error"})
-    
-    # Notarize
-    try:
-        from integrations.notarize_ron import notarize_client
-        statuses.append({
-            "service": "Notarize.com",
-            "configured": notarize_client.is_configured,
-            "purpose": "Remote online notarization",
-            "priority": "MEDIUM - Required for deed notarization"
-        })
-    except:
-        statuses.append({"service": "Notarize", "configured": False, "error": "Module error"})
-    
-    # Built-in integrations
-    statuses.append({
-        "service": "Stripe",
-        "configured": bool(STRIPE_API_KEY),
-        "purpose": "Subscriptions & EMD payments",
-        "priority": "ACTIVE"
-    })
-    statuses.append({
-        "service": "OpenAI GPT-5.2",
-        "configured": bool(os.environ.get('EMERGENT_LLM_KEY')),
-        "purpose": "AI property analysis & chatbot",
-        "priority": "ACTIVE"
-    })
-    
-    return {"integrations": statuses}
 
 # Updated CORS configuration for Production
 app.add_middleware(
