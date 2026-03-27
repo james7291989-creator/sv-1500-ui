@@ -57,7 +57,6 @@ export default function AvailableDeals() {
         )}
       </div>
 
-      {/* This is the Money Maker Modal we just built */}
       {selectedProperty && (
         <DealLockModal 
           property={selectedProperty} 
