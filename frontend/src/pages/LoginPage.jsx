@@ -8,7 +8,11 @@ export default function LoginPage() {
   const { token, login } = useAuth(); 
   const [error, setError] = useState('');
 
-  // Auto-route if already logged in
+  // CRACO/CRA Syntax: process.env.REACT_APP_...
+  // Fallback to your production URLs if env variables are missing
+  const API_URL = process.env.REACT_APP_API_URL || 'https://rodney-vault-api.onrender.com';
+  const GOOGLE_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '1048450143891-9qj7p47m5b48n8b8k8p8p8p8p8p8p8p8.apps.googleusercontent.com'; // Use your actual Client ID here
+
   useEffect(() => {
     if (token) {
       navigate('/available-deals');
@@ -18,7 +22,7 @@ export default function LoginPage() {
   useEffect(() => {
     const handleCredentialResponse = async (response) => {
       try {
-        const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, {
+        const res = await axios.post(`${API_URL}/api/auth/google`, {
           credential: response.credential
         });
         
@@ -31,13 +35,13 @@ export default function LoginPage() {
         }
       } catch (err) {
         console.error('Login failed:', err);
-        setError('Secure handshake failed. Ensure backend is deployed.');
+        setError('Handshake failed. Backend might be waking up.');
       }
     };
 
     if (window.google && !window.isGoogleInitialized) {
       window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        client_id: GOOGLE_ID,
         callback: handleCredentialResponse
       });
       
@@ -47,16 +51,16 @@ export default function LoginPage() {
       );
       window.isGoogleInitialized = true;
     }
-  }, [login, navigate]);
+  }, [login, navigate, API_URL, GOOGLE_ID]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       <div className="bg-[#1A1A1A] p-10 rounded-lg border border-[#C1A173] shadow-[0_0_30px_rgba(193,161,115,0.15)] max-w-md w-full text-center">
         <h1 className="text-3xl font-bold text-white mb-2">Rodney & Sons</h1>
-        <p className="text-[#C1A173] text-sm tracking-widest mb-8 uppercase">SV-1500 Kingdom</p>
+        <p className="text-[#C1A173] text-sm tracking-widest mb-8 uppercase text-shadow-gold">SV-1500 Kingdom</p>
         
         <p className="text-gray-400 mb-8 text-sm">
-          Strictly for authorized investors and executive personnel. Authenticate to access the Master Vault.
+          Strictly for authorized investors. Access the 100+ Live Asset Vault.
         </p>
         
         <div className="flex justify-center mb-6 min-h-[44px]">
@@ -64,8 +68,8 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="bg-red-900/20 border border-red-900 p-3 rounded">
-            <p className="text-red-500 text-xs">{error}</p>
+          <div className="bg-red-900/10 border border-red-900/50 p-3 rounded">
+            <p className="text-red-500 text-xs font-mono uppercase tracking-tighter">{error}</p>
           </div>
         )}
       </div>
