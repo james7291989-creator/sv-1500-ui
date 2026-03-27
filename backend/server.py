@@ -1,5 +1,8 @@
 import os
 import uuid
+import stripe
+import certifi
+import jwt
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, APIRouter, HTTPException, Depends
@@ -7,13 +10,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Dict
-import jwt
-import stripe
-import certifi
+from typing import Dict, Any
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
-# 1. Environment Vault
+# ========================== 1. ENVIRONMENT & VAULT SETUP ==========================
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -31,104 +33,154 @@ PLATFORM_DOMAIN = "https://rodney-vault-ui.vercel.app"
 app = FastAPI(title="Rodney & Sons OS API")
 security = HTTPBearer()
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for production lock pipeline testing
+    allow_origins=["*"], 
     allow_credentials=True, 
     allow_methods=["*"], 
     allow_headers=["*"],
 )
 
+auth_router = APIRouter(prefix="/api/auth", tags=["Auth"])
+properties_router = APIRouter(prefix="/api/properties", tags=["Properties"])
 deals_router = APIRouter(prefix="/api/deals", tags=["Deals"])
+admin_router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
-# --- AUTH VERIFICATION ---
+# ========================== 2. SECURITY & AUTH VERIFICATION ==========================
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user = await db.users.find_one({"id": payload.get("user_id")})
-        if not user:
-            # Fallback for dev/testing CEO
-            return {"id": "ceo-override", "email": "james7291989@gmail.com", "tier": "platinum"}
-        return {"id": user["id"], "email": user["email"]}
+        return {"id": payload.get("user_id"), "email": payload.get("email", "james7291989@gmail.com")}
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalid")
 
-# ========================== PRIORITY 1: MONEY MAKER ENDPOINT ==========================
+class GoogleAuthRequest(BaseModel):
+    credential: str
+
+@auth_router.post("/google")
+async def google_auth(data: GoogleAuthRequest):
+    try:
+        # Cryptographically verify Google's login token
+        request = google_requests.Request()
+        idinfo = id_token.verify_oauth2_token(data.credential, request, None)
+        email = idinfo['email']
+        name = idinfo.get('name', 'Investor')
+
+        # Find or create user in the Vault
+        user = await db.users.find_one({"email": email})
+        if not user:
+            user = {
+                "id": str(uuid.uuid4()),
+                "email": email,
+                "name": name,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.users.insert_one(user)
+
+        # Generate Rodney & Sons Master Token
+        token = jwt.encode({"user_id": user["id"], "email": user["email"]}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": name}}
+    except ValueError:
+        raise HTTPException(status_code=401, detail="CRITICAL: Invalid or forged Google token.")
+
+# ========================== 3. INVENTORY ENGINE ==========================
+@properties_router.get("")
+async def get_properties(limit: int = 50, skip: int = 0):
+    properties = await db.properties.find({"status": "new"}, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
+    return {"properties": properties}
+
+# ========================== 4. LEGAL LOI DEAL LOCK ==========================
+class LockRequest(BaseModel):
+    type: str = "letter_of_intent"
+
 @deals_router.post("/{property_id}/lock")
-async def lock_deal(property_id: str, user: Dict = Depends(get_current_user)):
-    # 1. Find the property
+async def lock_deal(property_id: str, payload: LockRequest, user: Dict = Depends(get_current_user)):
     property_data = await db.properties.find_one({"id": property_id})
     if not property_data:
-        raise HTTPException(status_code=404, detail="Asset not found in Vault.")
+        raise HTTPException(status_code=404, detail="Asset not found.")
     
-    if property_data.get("status") == "under_contract":
-        raise HTTPException(status_code=400, detail="Asset already locked by another investor.")
+    if property_data.get("status") != "new":
+        raise HTTPException(status_code=400, detail="Asset already locked or pending.")
 
     deal_id = str(uuid.uuid4())
 
-    # 2. Create the Stripe Checkout for $5,000 EMD
+    # Soft Lock the property (Removes from public view, queues for CEO)
+    await db.properties.update_one(
+        {"id": property_id},
+        {"$set": {"status": "pending_escrow", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    await db.deals.insert_one({
+        "id": deal_id,
+        "property_id": property_id,
+        "investor_email": user["email"],
+        "emd_collected": False,
+        "rodney_fee": 7500,
+        "status": "awaiting_emd", 
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"message": "Letter of Intent securely logged.", "deal_id": deal_id}
+
+# ========================== 5. CEO COMMAND CENTER ==========================
+@admin_router.get("/pipeline")
+async def get_deal_pipeline(user: Dict = Depends(get_current_user)):
+    if user["email"] != "james7291989@gmail.com":
+        raise HTTPException(status_code=403, detail="UNAUTHORIZED: CEO Access Only.")
+    
+    deals = await db.deals.find({}).to_list(100)
+    
+    pipeline = []
+    for deal in deals:
+        prop = await db.properties.find_one({"id": deal["property_id"]})
+        if prop:
+            deal["property_address"] = prop.get("address", "Unknown")
+            deal["arv"] = prop.get("estimated_arv", 0)
+            deal.pop("_id", None) # Clean for JSON
+            pipeline.append(deal)
+            
+    return {"pipeline": pipeline}
+
+@admin_router.post("/trigger-emd-invoice/{deal_id}")
+async def trigger_emd_invoice(deal_id: str, user: Dict = Depends(get_current_user)):
+    if user["email"] != "james7291989@gmail.com":
+        raise HTTPException(status_code=403, detail="UNAUTHORIZED: CEO Access Only.")
+        
+    deal = await db.deals.find_one({"id": deal_id})
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found.")
+        
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=['card', 'us_bank_account'],
-            customer_email=user["email"],
+            customer_email=deal["investor_email"],
             line_items=[{
                 'price_data': {
                     'currency': 'usd',
                     'product_data': {
-                        'name': f"EMD Deposit: {property_data['address']}",
-                        'description': "Non-refundable Earnest Money Deposit. Assignment Fee: $7,500."
+                        'name': f"EMD Deposit: {deal.get('property_address', 'LRA Asset')}",
+                        'description': "Non-refundable EMD. Title clear. Ready for escrow."
                     },
-                    'unit_amount': 500000, # $5,000 in cents
+                    'unit_amount': 500000,
                 },
                 'quantity': 1,
             }],
             mode='payment',
-            metadata={
-                "deal_id": deal_id,
-                "property_id": property_id,
-                "investor_email": user["email"],
-                "type": "emd_lock"
-            },
-            success_url=f'{PLATFORM_DOMAIN}/contracts?session_id={{CHECKOUT_SESSION_ID}}&deal={deal_id}',
-            cancel_url=f'{PLATFORM_DOMAIN}/available-deals'
+            success_url=f'{PLATFORM_DOMAIN}/escrow-active?deal={deal_id}',
+            cancel_url=f'{PLATFORM_DOMAIN}/ceo-dashboard'
         )
-
-        # 3. Secure the database records (Pending Payment)
-        await db.properties.update_one(
-            {"id": property_id},
-            {"$set": {"status": "pending_escrow", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        
+        await db.deals.update_one(
+            {"id": deal_id},
+            {"$set": {"status": "emd_invoice_sent", "stripe_payment_url": session.url}}
         )
-
-        deal_record = {
-            "id": deal_id,
-            "property_id": property_id,
-            "investor_email": user["email"],
-            "emd_collected": False,
-            "rodney_fee": 7500,
-            "status": "awaiting_emd",
-            "stripe_session_id": session.id,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.deals.insert_one(deal_record)
-
-        escrow_record = {
-            "id": str(uuid.uuid4()),
-            "deal_id": deal_id,
-            "provider": "Missouri Title Loans",
-            "rodney_cut": 7500,
-            "status": "pending_funds",
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.escrows.insert_one(escrow_record)
-
-        # 4. Trigger DocuSign Generation (Simulated Engine Call)
-        # In production, Stripe Webhook listening for 'checkout.session.completed' fires the actual DocuSign API payload
-        print(f"📄 DOCUSIGN ENGINE QUEUED: Assignment Contract for {user['email']} on {property_data['address']}")
-
-        return {"checkout_url": session.url, "deal_id": deal_id}
-
+        
+        return {"status": "success", "invoice_url": session.url}
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Stripe Engine Failure: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Invoice Engine Failure: {str(e)}")
 
+app.include_router(auth_router)
+app.include_router(properties_router)
 app.include_router(deals_router)
+app.include_router(admin_router)
