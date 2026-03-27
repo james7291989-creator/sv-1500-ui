@@ -104,18 +104,12 @@ class GoogleToken(BaseModel):
 
 @auth_router.post("/google")
 async def google_login(payload_data: GoogleToken):
-    # 1. Extract the token
     raw_token = payload_data.credential or payload_data.token
     if not raw_token:
         raise HTTPException(status_code=400, detail="No Google token provided")
 
     try:
-        # 2. Cryptographically verify the token with Google's servers
-        idinfo = id_token.verify_oauth2_token(
-            raw_token, google_requests.Request(), GOOGLE_CLIENT_ID
-        )
-
-        # 3. Extract the real user's verified data
+        idinfo = id_token.verify_oauth2_token(raw_token, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo.get('email')
         first_name = idinfo.get('given_name', '')
         last_name = idinfo.get('family_name', '')
@@ -123,10 +117,8 @@ async def google_login(payload_data: GoogleToken):
         if not email:
             raise HTTPException(status_code=400, detail="Google did not provide an email")
 
-        # 4. Check if user exists in your MongoDB database
         user = await db.users.find_one({"email": email}, {"_id": 0})
 
-        # 5. If it is a brand new user, create their official account
         if not user:
             user_id = str(uuid.uuid4())
             is_ceo = (email == "james7291989@gmail.com")
@@ -143,7 +135,6 @@ async def google_login(payload_data: GoogleToken):
             }
             await db.users.insert_one(user)
 
-        # 6. Mint the secure JWT session token for your platform
         jwt_payload = {
             "user_id": user["id"],
             "email": user["email"],
@@ -155,6 +146,14 @@ async def google_login(payload_data: GoogleToken):
 
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Google authentication failed: {str(e)}")
+
+@auth_router.get("/me")
+async def get_me(user: Dict = Depends(get_current_user)):
+    # This route is required by AuthContext.js to verify session on page reload
+    db_user = await db.users.find_one({"email": user["email"]}, {"_id": 0})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
 
 # ========================== ROUTES ==========================
 @properties_router.get("")
