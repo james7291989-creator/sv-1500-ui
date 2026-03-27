@@ -31,13 +31,14 @@ PLATFORM_DOMAIN = "https://rodney-vault-ui.vercel.app"
 
 app = FastAPI(title="Rodney & Sons OS API", version="1.0.0")
 
-# ========================== SECURE CORS POLICY (MOVED TO TOP) ==========================
+# ========================== SECURE CORS POLICY ==========================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://rodney-vault-ui.vercel.app", 
         "https://n-smoky-sigma.vercel.app", 
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "http://localhost:3000"
     ],
     allow_credentials=True, 
     allow_methods=["*"], 
@@ -91,20 +92,21 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except Exception:
         raise HTTPException(status_code=401, detail="Token invalid")
 
-# ========================== GOOGLE AUTH ENGINE ==========================
+# ========================== GOOGLE AUTH ENGINE (UNIVERSAL PATCH) ==========================
 class GoogleToken(BaseModel):
-    credential: str
+    token: Optional[str] = None
+    credential: Optional[str] = None
 
 @auth_router.post("/google")
-async def google_login(token_data: GoogleToken):
+async def google_login(payload_data: GoogleToken):
     user_id = str(uuid.uuid4())
-    payload = {
+    jwt_payload = {
         "user_id": user_id,
         "email": "james7291989@gmail.com",
         "exp": datetime.now(timezone.utc) + timedelta(hours=24)
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return {"token": token, "user": {"id": user_id, "email": "james7291989@gmail.com", "tier": "platinum"}}
+    encoded_token = jwt.encode(jwt_payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {"token": encoded_token, "user": {"id": user_id, "email": "james7291989@gmail.com", "tier": "platinum"}}
 
 # ========================== ROUTES ==========================
 @properties_router.get("")
@@ -117,13 +119,4 @@ async def create_checkout_session(payment_type: str, tier: Optional[str] = None,
     amount = int(SUBSCRIPTION_TIERS[tier]["price"] * 100)
     session = stripe.checkout.Session.create(
         payment_method_types=['card'], customer_email=user["email"],
-        line_items=[{'price_data': {'currency': 'usd', 'product_data': {'name': f"Rodney & Sons - {tier.title()} Data Access"}, 'unit_amount': amount}, 'quantity': 1}],
-        mode='payment', success_url=f'{PLATFORM_DOMAIN}/payment-success?session_id={{CHECKOUT_SESSION_ID}}', cancel_url=f'{PLATFORM_DOMAIN}'
-    )
-    return {"checkout_url": session.url}
-
-app.include_router(api_router)
-app.include_router(auth_router)
-app.include_router(properties_router)
-app.include_router(payments_router)
-app.include_router(admin_router)
+        line_items=[{'price_data': {'currency': 'usd', 'product_data': {'name': f"Rodney
