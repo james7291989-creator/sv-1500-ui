@@ -24,7 +24,8 @@ const LoginPage = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          token: credentialResponse.credential
+          // SURGICAL SWAP: Changed 'token' to 'credential' to match backend lock
+          credential: credentialResponse.credential
         }),
       });
 
@@ -41,12 +42,16 @@ const LoginPage = () => {
       localStorage.setItem('token', appToken);
       localStorage.setItem('user', JSON.stringify(user));
       
-      // Force a hard reload to the dashboard so the AuthContext catches the new token
-      window.location.href = '/dashboard';
+      // Check if user is the CEO to route correctly
+      if (user.email === 'james7291989@gmail.com') {
+        window.location.href = '/ceo-dashboard';
+      } else {
+        window.location.href = '/available-deals';
+      }
 
     } catch (err) {
       console.error("Backend Handshake Failed:", err);
-      setError("Server Error: Render might still be deploying the new code. Wait 60 seconds and try again.");
+      setError("Server Error: Authentication failed. Please try again in 60 seconds.");
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +104,7 @@ const LoginPage = () => {
 
             {/* APPLE PLACEHOLDER */}
             <button disabled className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-black border border-zinc-700 text-white rounded-md font-medium opacity-50 cursor-not-allowed">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z" display="none"/><path d="M15.195 4.39A4.18 4.18 0 0016.2 1.346c-1.22.046-2.585.803-3.41 1.765-.738.85-1.332 2.112-1.144 3.327 1.319.1 2.628-.68 3.549-2.048zm-4.417 12.33c-1.558 0-2.812-1.042-4.04-1.042-1.258 0-2.56.993-4.053 1.042-1.956.07-3.784-1.139-4.802-2.901-2.071-3.578-.532-8.88 1.487-11.78 1.002-1.428 2.505-2.333 4.14-2.368 1.488-.035 2.887.994 4.095.994 1.22 0 2.87-1.198 4.606-1.031 1.952.095 3.725.795 4.935 2.535-3.893 2.33-3.321 7.747.533 9.356-1.033 2.512-2.316 4.936-4.901 4.89z"/></svg>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M15.195 4.39A4.18 4.18 0 0016.2 1.346c-1.22.046-2.585.803-3.41 1.765-.738.85-1.332 2.112-1.144 3.327 1.319.1 2.628-.68 3.549-2.048zm-4.417 12.33c-1.558 0-2.812-1.042-4.04-1.042-1.258 0-2.56.993-4.053 1.042-1.956.07-3.784-1.139-4.802-2.901-2.071-3.578-.532-8.88 1.487-11.78 1.002-1.428 2.505-2.333 4.14-2.368 1.488-.035 2.887.994 4.095.994 1.22 0 2.87-1.198 4.606-1.031 1.952.095 3.725.795 4.935 2.535-3.893 2.33-3.321 7.747.533 9.356-1.033 2.512-2.316 4.936-4.901 4.89z"/></svg>
               Continue with Apple
             </button>
 
