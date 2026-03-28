@@ -4,7 +4,7 @@ import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 // 🛑 CEO: PASTE YOUR GOOGLE GEMINI API KEY RIGHT HERE INSIDE THE QUOTES 🛑
-const GEMINI_API_KEY = "PASTE_YOUR_API_KEY_HERE"; 
+const GEMINI_API_KEY = "AIzaSyB6jwZPM0fy0qD_jj369WVY5zs6KnddZnQ"; 
 
 const AIChat = () => {
   const { user } = useAuth();
