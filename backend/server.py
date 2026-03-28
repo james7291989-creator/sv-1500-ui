@@ -83,6 +83,11 @@ async def google_auth(data: GoogleAuthRequest):
     except ValueError:
         raise HTTPException(status_code=401, detail="CRITICAL: Invalid or forged Google token.")
 
+# --- THE MISSING IDENTITY CHECK ---
+@auth_router.get("/me")
+async def get_me(user: Dict = Depends(get_current_user)):
+    return {"user": user}
+
 # ========================== 3. INVENTORY ENGINE ==========================
 @properties_router.get("")
 async def get_properties(limit: int = 50, skip: int = 0):
