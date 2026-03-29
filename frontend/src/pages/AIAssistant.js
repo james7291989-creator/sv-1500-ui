@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, BrainCircuit, Calculator, Scale, Loader2, Activity } from 'lucide-react';
-import { toast } from 'sonner';
 
 const AIAssistant = () => {
   const [messages, setMessages] = useState([
@@ -50,7 +49,6 @@ const AIAssistant = () => {
       const aiText = data.candidates[0].content.parts[0].text;
       setMessages([...newMessages, { role: 'assistant', content: aiText }]);
     } catch (error) {
-      toast.error('AI Link Severed.');
       setMessages([...newMessages, { role: 'assistant', content: `SYSTEM ERROR: ${error.message}` }]);
     } finally {
       setIsLoading(false);
