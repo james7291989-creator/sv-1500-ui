@@ -38,9 +38,9 @@ const AIAssistant = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      // OFFICIAL SDK PIPELINE - Replaces the manual URL
+      // OFFICIAL SDK PIPELINE - Locked onto gemini-2.5-flash
       const genAI = new GoogleGenerativeAI(API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       
       const result = await model.generateContent(`${systemPrompt}\n\nUser: ${userText}`);
       const aiText = result.response.text();
