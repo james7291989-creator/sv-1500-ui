@@ -8,9 +8,8 @@ const AIChat = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // SECURITY PROTOCOL: Pulling the API key from the hidden .env vault. 
-  // There is NO hardcoded key here.
-  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+  // VITE SECURITY PROTOCOL: Pulling the API key
+  const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -52,7 +51,6 @@ const AIChat = () => {
 
   return (
     <>
-      {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-6 right-6 p-4 rounded-full bg-primary text-white shadow-[0_0_20px_rgba(var(--primary-rgb),0.5)] hover:scale-110 transition-transform z-40 ${isOpen ? 'hidden' : 'block'}`}
@@ -60,11 +58,9 @@ const AIChat = () => {
         <MessageSquare size={24} />
       </button>
 
-      {/* Chat Window */}
       {isOpen && (
         <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-zinc-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-10">
           
-          {/* Header */}
           <div className="p-4 border-b border-white/10 bg-black/20 flex justify-between items-center">
             <div className="flex items-center space-x-2">
               <div className="p-2 bg-primary/20 rounded-lg">
@@ -80,7 +76,6 @@ const AIChat = () => {
             </button>
           </div>
 
-          {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -104,7 +99,6 @@ const AIChat = () => {
             )}
           </div>
 
-          {/* Input Area */}
           <div className="p-4 border-t border-white/10 bg-black/20">
             <div className="flex items-center space-x-2">
               <input

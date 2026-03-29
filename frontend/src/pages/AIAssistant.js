@@ -14,8 +14,8 @@ const AIAssistant = () => {
   const [activePersona, setActivePersona] = useState('underwriter');
   const messagesEndRef = useRef(null);
 
-  // Secure API Key Call
-  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+  // VITE SECURITY PROTOCOL: Pulling the API key
+  const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -39,7 +39,6 @@ const AIAssistant = () => {
          throw new Error("API Key Vault locked. Check your .env file and Vercel settings.");
       }
 
-      // Context injection based on the selected persona
       let systemPrompt = "You are the SV-1500 Quantum AI, an elite real estate investment assistant.";
       if (activePersona === 'underwriter') systemPrompt += " Analyze deals strictly using the 70% rule (ARV * 0.70 - repairs - wholesale fee = Max Allowable Offer). Be precise.";
       if (activePersona === 'rehab') systemPrompt += " You are an expert general contractor. Estimate rehab costs line-by-line based on the user's description.";
@@ -81,7 +80,6 @@ const AIAssistant = () => {
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-6 animate-in fade-in duration-700 pb-6">
       
-      {/* LEFT COLUMN: The Targeting Matrix (Personas) */}
       <div className="w-full lg:w-80 flex flex-col gap-4">
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 h-full">
           <div className="flex items-center space-x-3 mb-8 pb-6 border-b border-white/10">
@@ -117,11 +115,9 @@ const AIAssistant = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: The Output Console (Chat) */}
       <div className="flex-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex flex-col overflow-hidden shadow-2xl relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
         
-        {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
@@ -135,7 +131,6 @@ const AIAssistant = () => {
                   ? 'bg-white text-black font-medium rounded-2xl rounded-tr-sm shadow-lg' 
                   : 'bg-black/40 border border-white/10 text-zinc-300 rounded-2xl rounded-tl-sm'
               }`}>
-                {/* Simple formatting for AI responses */}
                 {msg.content.split('\n').map((line, i) => (
                   <span key={i}>
                     {line.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')}
@@ -163,7 +158,6 @@ const AIAssistant = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Arsenal */}
         <div className="p-4 bg-black/40 border-t border-white/10 backdrop-blur-md z-10">
           <div className="max-w-4xl mx-auto flex items-end space-x-3">
             <textarea
