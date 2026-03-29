@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, BrainCircuit, Calculator, Scale, Loader2, Activity } from 'lucide-react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const AIAssistant = () => {
   const [messages, setMessages] = useState([
@@ -10,7 +11,6 @@ const AIAssistant = () => {
   const [activePersona, setActivePersona] = useState('underwriter');
   const messagesEndRef = useRef(null);
 
-  // Locked onto the correct Vercel vault
   const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GOOGLE_API_KEY : "");
 
   const scrollToBottom = () => {
@@ -38,17 +38,13 @@ const AIAssistant = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      // WIRED TO GEMINI-1.5-FLASH
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] }] })
-      });
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message || "Failed to communicate with AI.");
-
-      const aiText = data.candidates[0].content.parts[0].text;
+      // OFFICIAL SDK PIPELINE - Replaces the manual URL
+      const genAI = new GoogleGenerativeAI(API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      const result = await model.generateContent(`${systemPrompt}\n\nUser: ${userText}`);
+      const aiText = result.response.text();
+      
       setMessages([...newMessages, { role: 'assistant', content: aiText }]);
     } catch (error) {
       setMessages([...newMessages, { role: 'assistant', content: `SYSTEM ERROR: ${error.message}` }]);
