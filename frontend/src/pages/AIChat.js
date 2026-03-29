@@ -37,7 +37,8 @@ const AIChat = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`, {
+      // UPDATED TO FLASH ENGINE
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] }] })
