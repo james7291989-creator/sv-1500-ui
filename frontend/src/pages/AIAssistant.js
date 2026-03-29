@@ -10,7 +10,8 @@ const AIAssistant = () => {
   const [activePersona, setActivePersona] = useState('underwriter');
   const messagesEndRef = useRef(null);
 
-  const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+  // Locked onto the correct Vercel vault
+  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GOOGLE_API_KEY : "");
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,7 +38,8 @@ const AIAssistant = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${API_KEY}`, {
+      // WIRED TO GEMINI-1.5-FLASH
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] }] })
@@ -62,17 +64,16 @@ const AIAssistant = () => {
   ];
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-6 animate-in fade-in duration-700 pb-6 relative overflow-hidden">
+    <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-6 animate-in fade-in duration-700 pb-6 relative overflow-hidden bg-zinc-950">
       
-      {/* LIVE ANIMATIONS: Moving Orbs */}
+      {/* LIVE ANIMATIONS */}
       <div className="absolute top-0 left-[-10%] w-[50%] h-[50%] bg-primary/20 rounded-full blur-[120px] mix-blend-screen animate-[pulse_6s_ease-in-out_infinite] pointer-events-none z-0"></div>
       <div className="absolute bottom-0 right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] mix-blend-screen animate-[pulse_8s_ease-in-out_infinite_reverse] pointer-events-none z-0"></div>
 
-      {/* LEFT COLUMN: Control Panel */}
+      {/* LEFT COLUMN */}
       <div className="w-full lg:w-80 flex flex-col gap-4 z-10">
-        <div className="bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 h-full shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+        <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 h-full shadow-2xl">
           
-          {/* Pulsing Radar Header */}
           <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-white/5">
             <div className="relative">
               <div className="absolute inset-0 bg-primary/50 rounded-2xl animate-ping opacity-75"></div>
@@ -114,21 +115,21 @@ const AIAssistant = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Chat Terminal */}
-      <div className="flex-1 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl flex flex-col overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-10">
+      {/* RIGHT COLUMN */}
+      <div className="flex-1 bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl flex flex-col overflow-hidden shadow-2xl z-10">
         
         <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-smooth pt-8">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-4`}>
               {msg.role === 'assistant' && (
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/20 flex items-center justify-center mr-4 shadow-lg">
+                <div className="w-10 h-10 rounded-xl bg-black border border-white/20 flex items-center justify-center mr-4 shadow-lg">
                   <Bot className="w-5 h-5 text-primary" />
                 </div>
               )}
               <div className={`max-w-[80%] p-5 text-sm leading-relaxed shadow-2xl ${
                 msg.role === 'user' 
                   ? 'bg-primary text-white font-medium rounded-[2rem] rounded-tr-sm' 
-                  : 'bg-white/10 border border-white/10 text-zinc-100 rounded-[2rem] rounded-tl-sm backdrop-blur-md'
+                  : 'bg-black/60 border border-white/10 text-zinc-100 rounded-[2rem] rounded-tl-sm backdrop-blur-md'
               }`}>
                 {msg.content.split('\n').map((line, i) => (
                   <span key={i}>
@@ -141,11 +142,11 @@ const AIAssistant = () => {
           ))}
           {isLoading && (
             <div className="flex justify-start animate-in fade-in">
-              <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/20 flex items-center justify-center mr-4 relative">
+              <div className="w-10 h-10 rounded-xl bg-black border border-white/20 flex items-center justify-center mr-4 relative">
                  <div className="absolute inset-0 bg-primary/20 rounded-xl animate-ping opacity-50"></div>
                  <Bot className="w-5 h-5 text-primary animate-pulse" />
               </div>
-              <div className="bg-white/10 border border-white/10 p-5 rounded-[2rem] rounded-tl-sm flex items-center space-x-3">
+              <div className="bg-black/60 border border-white/10 p-5 rounded-[2rem] rounded-tl-sm flex items-center space-x-3">
                 <span className="text-xs text-primary font-bold tracking-widest uppercase mr-2 animate-pulse">Processing</span>
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-white/80 rounded-full animate-bounce"></div>
