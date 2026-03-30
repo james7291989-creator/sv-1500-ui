@@ -10,7 +10,8 @@ const AIChat = () => {
   const [activePersona, setActivePersona] = useState('underwriter');
   const messagesEndRef = useRef(null);
 
-  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GOOGLE_API_KEY : "");
+  // Pulling from the exact vault you just fixed in Vercel
+  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,18 +38,33 @@ const AIChat = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      // UPDATED TO FLASH ENGINE
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+      // THE BOARDROOM FIX: Raw v1 Tunnel targeting gemini-2.5-flash
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] }] })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            { 
+              role: "user", 
+              parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] 
+            }
+          ]
+        })
       });
 
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message || "Failed to communicate with AI.");
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Unknown API Error. Tunnel collapsed.");
+      }
 
       const aiText = data.candidates[0].content.parts[0].text;
       setMessages([...newMessages, { role: 'assistant', content: aiText }]);
+      
     } catch (error) {
       setMessages([...newMessages, { role: 'assistant', content: `SYSTEM ERROR: ${error.message}` }]);
     } finally {
@@ -65,15 +81,14 @@ const AIChat = () => {
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-6 animate-in fade-in duration-700 pb-6 relative overflow-hidden bg-zinc-950">
       
-      {/* LIVE ANIMATIONS: Moving Orbs */}
+      {/* LIVE ANIMATIONS */}
       <div className="absolute top-0 left-[-10%] w-[50%] h-[50%] bg-primary/20 rounded-full blur-[120px] mix-blend-screen animate-[pulse_6s_ease-in-out_infinite] pointer-events-none z-0"></div>
       <div className="absolute bottom-0 right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] mix-blend-screen animate-[pulse_8s_ease-in-out_infinite_reverse] pointer-events-none z-0"></div>
 
-      {/* LEFT COLUMN: Control Panel */}
+      {/* LEFT COLUMN */}
       <div className="w-full lg:w-80 flex flex-col gap-4 z-10">
         <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 h-full shadow-2xl">
           
-          {/* Pulsing Radar Header */}
           <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-white/5">
             <div className="relative">
               <div className="absolute inset-0 bg-primary/50 rounded-2xl animate-ping opacity-75"></div>
@@ -115,7 +130,7 @@ const AIChat = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Chat Terminal */}
+      {/* RIGHT COLUMN */}
       <div className="flex-1 bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl flex flex-col overflow-hidden shadow-2xl z-10">
         
         <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-smooth pt-8">
