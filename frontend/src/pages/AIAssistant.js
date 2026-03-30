@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, BrainCircuit, Calculator, Scale, Loader2, Activity } from 'lucide-react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const AIAssistant = () => {
   const [messages, setMessages] = useState([
@@ -11,7 +10,8 @@ const AIAssistant = () => {
   const [activePersona, setActivePersona] = useState('underwriter');
   const messagesEndRef = useRef(null);
 
-  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY || (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GOOGLE_API_KEY : "");
+  // Pulling from the exact vault you just fixed in Vercel
+  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,14 +38,33 @@ const AIAssistant = () => {
       if (activePersona === 'rehab') systemPrompt += " You are an expert GC. Estimate rehab costs line-by-line.";
       if (activePersona === 'legal') systemPrompt += " You are a real estate strategist. Focus on contracts and closing.";
 
-      // OFFICIAL SDK PIPELINE - Locked onto gemini-2.5-flash
-      const genAI = new GoogleGenerativeAI(API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-      
-      const result = await model.generateContent(`${systemPrompt}\n\nUser: ${userText}`);
-      const aiText = result.response.text();
-      
+      // THE BOARDROOM FIX: Raw v1 Tunnel targeting gemini-2.5-flash
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            { 
+              role: "user", 
+              parts: [{ text: `${systemPrompt}\n\nUser: ${userText}` }] 
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Unknown API Error. Tunnel collapsed.");
+      }
+
+      const aiText = data.candidates[0].content.parts[0].text;
       setMessages([...newMessages, { role: 'assistant', content: aiText }]);
+      
     } catch (error) {
       setMessages([...newMessages, { role: 'assistant', content: `SYSTEM ERROR: ${error.message}` }]);
     } finally {
