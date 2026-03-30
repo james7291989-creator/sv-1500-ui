@@ -8,7 +8,8 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchDashboardDeals = async () => {
       try {
-        const token = localStorage.getItem("token");
+        // SECURE VAULT UPDATE: Switched to sessionStorage
+        const token = sessionStorage.getItem("token");
         const apiUrl = import.meta.env.VITE_API_URL || 'https://rodney-vault-api.onrender.com';
         
         // Fetch only the 3 most recent properties from the live database

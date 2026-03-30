@@ -38,9 +38,9 @@ const LoginPage = () => {
       // The backend says "You are good!" and hands us our own VIP Pass
       const { token: appToken, user } = data;
       
-      // Save the VIP Pass to local storage
-      localStorage.setItem('token', appToken);
-      localStorage.setItem('user', JSON.stringify(user));
+      // SECURE VAULT UPDATE: Save the VIP Pass to session storage (Temporary Vault)
+      sessionStorage.setItem('token', appToken);
+      sessionStorage.setItem('user', JSON.stringify(user));
       
       // Check if user is the CEO to route correctly
       if (user.email === 'james7291989@gmail.com') {
