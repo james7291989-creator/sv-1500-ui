@@ -8,9 +8,9 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchDashboardDeals = async () => {
       try {
-        // SECURE VAULT UPDATE: Switched to sessionStorage
         const token = sessionStorage.getItem("token");
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://rodney-vault-api.onrender.com';
+        // NEW OVERRIDE: Pointing directly to your local Python brain
+        const apiUrl = 'http://127.0.0.1:5000';
         
         // Fetch only the 3 most recent properties from the live database
         const response = await fetch(`${apiUrl}/api/properties?limit=3`, {
@@ -76,7 +76,7 @@ export default function Dashboard() {
             <h3 className="text-xl font-bold text-white">Latest Market Assets</h3>
             <p className="text-sm text-gray-400">Recently detected county inventory</p>
           </div>
-          <Link to="/available-deals" className="text-blue-400 hover:text-blue-300 font-bold text-sm">View All →</Link>
+          <Link to="/properties" className="text-blue-400 hover:text-blue-300 font-bold text-sm">View All →</Link>
         </div>
         
         <div className="p-6">
@@ -90,21 +90,23 @@ export default function Dashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {deals.map(deal => (
-                <div key={deal.id} className="bg-gray-900 p-5 rounded border border-gray-700 hover:border-blue-500 transition cursor-pointer relative">
-                  <div className="absolute top-0 right-0 bg-red-900 text-red-300 text-xs font-bold px-2 py-1 rounded-bl">LOCKED</div>
-                  <h4 className="text-lg font-bold text-gray-400 mb-1 blur-sm">{deal.address || "123 Hidden St"}</h4>
-                  <p className="text-sm text-gray-500 mb-3">{deal.city}, {deal.county}</p>
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase">Est. ARV</p>
-                      <p className="text-white font-bold">${deal.estimated_arv?.toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500 uppercase">Score</p>
-                      <p className="text-yellow-500 font-black text-xl">{deal.distress_score}</p>
+                <Link to={`/properties/${deal.id || deal._id}`} key={deal.id || deal._id}>
+                  <div className="bg-gray-900 p-5 rounded border border-gray-700 hover:border-blue-500 transition cursor-pointer relative h-full">
+                    <div className="absolute top-0 right-0 bg-green-900 text-green-300 text-xs font-bold px-2 py-1 rounded-bl">AVAILABLE</div>
+                    <h4 className="text-lg font-bold text-white mb-1">{deal.address || "Address Hidden"}</h4>
+                    <p className="text-sm text-gray-500 mb-3">{deal.city || "St. Louis"}, {deal.county || "MO"}</p>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase">Asking</p>
+                        <p className="text-white font-bold">${deal.asking_price?.toLocaleString() || "TBD"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 uppercase">Score</p>
+                        <p className="text-yellow-500 font-black text-xl">{deal.distress_score || "N/A"}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
