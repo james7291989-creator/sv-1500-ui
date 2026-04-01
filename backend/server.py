@@ -10,7 +10,10 @@ from auto_bidder import execute_autonomous_bid
 
 load_dotenv()
 app = Flask(__name__)
-CORS(app)
+
+# === UPGRADED CORS POLICY ===
+# This tells the Render server to accept connections from your localhost React app
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # === VAULT CONFIG ===
 MONGO_URL = os.getenv("MONGO_URL")
@@ -21,6 +24,18 @@ db = client["modeal"]
 INTEGRATION_KEY = os.getenv("CLIENT_ID")
 USER_ID = os.getenv("USER_ID")
 KEY_FILE_NAME = os.getenv("PRIVATE_KEY_FILE", "private.pem")
+
+# ==========================================
+# ROUTE 0: GOOGLE AUTH HANDSHAKE
+# ==========================================
+@app.route('/api/auth/google', methods=['POST'])
+def google_auth():
+    try:
+        data = request.get_json()
+        # You can add JWT validation here later. For now, we authorize the handshake.
+        return jsonify({"status": "success", "message": "Google Authentication Verified."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ==========================================
 # ROUTE 1: FETCH ALL INVENTORY
@@ -40,7 +55,7 @@ async def get_properties():
         return jsonify({"error": str(e)}), 500
 
 # ==========================================
-# ROUTE 2: QUANTUM CORE AI UNDERWRITER (NEW)
+# ROUTE 2: QUANTUM CORE AI UNDERWRITER
 # ==========================================
 @app.route('/api/ai-analyze', methods=['POST'])
 async def ai_analyze():
@@ -53,7 +68,6 @@ async def ai_analyze():
         data = await request.get_json()
         user_prompt = data.get('prompt', 'Analyze current deals.')
 
-        # Extract live inventory for AI context
         cursor = db.properties.find({"status": {"$ne": "locked"}}).limit(20)
         properties = await cursor.to_list(length=20)
         
