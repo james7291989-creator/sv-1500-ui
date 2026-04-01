@@ -1,3 +1,5 @@
+Flask==3.0.2
+Flask-Cors==4.0.0
 fastapi==0.110.0
 uvicorn==0.27.1
 motor==3.1.1
