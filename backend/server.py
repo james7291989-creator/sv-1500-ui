@@ -1,5 +1,6 @@
 import os
 import certifi
+import google.generativeai as genai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -22,7 +23,7 @@ USER_ID = os.getenv("USER_ID")
 KEY_FILE_NAME = os.getenv("PRIVATE_KEY_FILE", "private.pem")
 
 # ==========================================
-# ROUTE 1: FETCH ALL INVENTORY (For Dashboard)
+# ROUTE 1: FETCH ALL INVENTORY
 # ==========================================
 @app.route('/api/properties', methods=['GET'])
 async def get_properties():
@@ -32,27 +33,44 @@ async def get_properties():
         properties = await cursor.to_list(length=limit)
         for p in properties:
             p['_id'] = str(p['_id'])
-            if 'id' not in p: p['id'] = p['_id'] # Safety fallback
+            if 'id' not in p: p['id'] = p['_id']
         return jsonify({"properties": properties})
     except Exception as e:
         print(f"Error fetching properties: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ==========================================
-# ROUTE 2: FETCH SINGLE PROPERTY (For Detail Page)
+# ROUTE 2: QUANTUM CORE AI UNDERWRITER (NEW)
 # ==========================================
-@app.route('/api/properties/<prop_id>', methods=['GET'])
-async def get_property(prop_id):
+@app.route('/api/ai-analyze', methods=['POST'])
+async def ai_analyze():
     try:
-        # Check by custom 'id' or Mongo's '_id'
-        prop = await db.properties.find_one({"$or": [{"id": prop_id}, {"_id": prop_id}]})
-        if not prop:
-            return jsonify({"error": "Property not found"}), 404
-        prop['_id'] = str(prop['_id'])
-        if 'id' not in prop: prop['id'] = prop['_id']
-        return jsonify(prop)
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return jsonify({"error": "AI Key not configured in Render"}), 500
+            
+        genai.configure(api_key=api_key)
+        data = await request.get_json()
+        user_prompt = data.get('prompt', 'Analyze current deals.')
+
+        # Extract live inventory for AI context
+        cursor = db.properties.find({"status": {"$ne": "locked"}}).limit(20)
+        properties = await cursor.to_list(length=20)
+        
+        inventory_context = []
+        for p in properties:
+            inventory_context.append(f"[{p.get('county', 'MO')}] {p.get('address')} - Price: ${p.get('asking_price')} - Distress: {p.get('distress_score')}")
+        
+        context_str = " | ".join(inventory_context)
+        system_instructions = f"You are the Quantum Core AI Underwriter for Rodney & Sons LLC. Analyze deals with high-level financial precision. Live active inventory: {context_str}"
+        
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(f"{system_instructions}\n\nUSER DIRECTIVE: {user_prompt}")
+        
+        return jsonify({"response": response.text})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"AI ERROR: {e}")
+        return jsonify({"error": "Quantum Core connection failed."}), 500
 
 # ==========================================
 # ROUTE 3: THE "TITAN" AUTONOMOUS ROUTE
@@ -65,16 +83,13 @@ async def lock_and_assign():
         user_name = data.get('name', 'Serious Investor')
         prop_id = data.get('property_id')
 
-        # 1. FETCH PROPERTY
         prop = await db.properties.find_one({"$or": [{"id": prop_id}, {"_id": prop_id}]})
         if not prop: return jsonify({"error": "Property not found"}), 404
 
-        # 2. RUN AUTO-BIDDER
         bid_success = await execute_autonomous_bid(prop, {"name": user_name, "email": user_email})
         if not bid_success:
-            return jsonify({"error": "Failed to generate County Bid PDF. Check server logs."}), 500
+            return jsonify({"error": "Failed to generate County Bid PDF."}), 500
 
-        # 3. TRIGGER DOCUSIGN
         with open(KEY_FILE_NAME, "r") as f: RSA_KEY = f.read()
         api_client = ApiClient()
         api_client.set_base_path("https://demo.docusign.net/restapi")
